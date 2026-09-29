@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Lijstjes</string>
+    <string name="title_activity_main">Lijstjes</string>
+    <string name="package_name">com.lijstjes.app</string>
+    <string name="custom_url_scheme">com.lijstjes.app</string>
+</resources>

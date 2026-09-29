@@ -1,0 +1,32 @@
+{
+  "name": "lijstjes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -b",
+    "format": "prettier --write \"src/**/*.{ts,vue,css}\" \"scripts/**/*.ts\" \"*.{ts,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,vue,css}\" \"scripts/**/*.ts\" \"*.{ts,json,md}\"",
+    "verify:data": "rolldown scripts/verify-data-layer.ts -f esm -p node -o node_modules/.tmp/verify-data-layer.mjs && node node_modules/.tmp/verify-data-layer.mjs",
+    "android:sync": "npx cap sync android",
+    "android:build": "npx cap build android --androidreleasetype APK"
+  },
+  "dependencies": {
+    "@capacitor/android": "latest",
+    "@capacitor/cli": "latest",
+    "@capacitor/core": "latest",
+    "@supabase/supabase-js": "^2.117.2",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1",
+    "vue-tsc": "^3.3.11"
+  }
+}
