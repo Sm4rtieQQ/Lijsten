@@ -336,6 +336,14 @@ De Android `.apk` export gebeurt **alleen nadat de gebruiker expliciet zegt dat 
      sdk.dir=/home/martin_legtenberg/Android/Sdk
      ```
    - Vereist: platform `android-36` (of hoger), build-tools >= 36.0.0.
+   - **JDK:** de systeem-`java` (OpenJDK 25) is **te nieuw** voor Gradle 8.14.3 / AGP 8.13
+     (`Unsupported class file major version 69`) en er is geen passwordless sudo om een JDK te
+     installeren. Gebruik daarom bij elke Gradle-opdracht (ook `npm run android:build`) expliciet:
+     ```bash
+     JAVA_HOME=/opt/android-studio-for-platform/jbr ./gradlew ...   # JDK 21 (Android Studio JBR, bevat javac)
+     ```
+     `JAVA_HOME` zonder losse value (`JAVA_HOME=… ./gradlew`) werkt; zet hem niet permanent
+     als je elders Java 25 wilt.
 
 2. **Build web**
    - `npm run test` (groen), `npm run build` (moet slagen, typecheck clean)

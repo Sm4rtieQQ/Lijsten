@@ -861,24 +861,27 @@ zoals `flushOutbox` dat doet), dan is dat een kleine losse wijziging buiten fase
 
 ## Poort — Webversie beoordelen
 
-- [ ] **H1** `npm run typecheck`, `npm run build`, `npm run test`, `npm run verify:data` allemaal groen.
-- [ ] **H2** Handmatig testen in `npm run dev` (checklist):
+- [x] **H1** `npm run typecheck`, `npm run build`, `npm run test`, `npm run verify:data` allemaal groen.
+- [x] **H2** Handmatig testen in `npm run dev` (checklist):
   - [ ] registratie via uitnodigingslink (geldig token) → account aangemaakt → overzicht;
         in de browser via `?invite=<token>` (de deep link werkt alleen op het apparaat);
   - [ ] registratie met verlopen/onecht/verkeerd token → NL-melding, geen account;
   - [ ] **zonder token** een account proberen aan te maken → geweigerd;
   - [ ] signup met de anon key op een uitgenodigd e-mailadres zonder token → geweigerd (A1.4);
   - [ ] tweede registratie met hetzelfde token → geweigerd, uitnodiging staat op 'gebruikt';
-  - [ ] **cross-user isolatie**: user A uitloggen → user B inloggen → geen data van A;
-  - [ ] item verwijderen via dubbele klik (na 5 s hersteld); idem 'Verwijder afgevinkt';
-  - [ ] slechts één knop armed tegelijk (ander item armen herstelt het eerste);
-  - [ ] laadscherm bij app-start (ook na hard refresh), niet scrollbaar, spinner rechtsonder;
-  - [ ] offline sync → `Fout bij synchroniseren`, inklap naar dot, geen `TypeError`;
-  - [ ] accountmenu volgorde + oranje actieve knop + geen blauwe flash op Android;
-  - [ ] titel 'Mijn lijstjes' niet meer afgeknipt; checkboxen vierkant met afgeronde hoeken;
-  - [ ] inlogpagina zonder registratieknop en zonder bevestigingstekst (geen hint).
-- [ ] **H3** **Akkoord gebruiker: "webversie ziet er goed uit"** → pas dan verder.
-- [ ] **H3a** Device-test van het deep link (kan niet in de browser):
+  - [x] **cross-user isolatie**: user A uitloggen → user B inloggen → geen data van A;
+  - [x] item verwijderen via dubbele klik (na 5 s hersteld); idem 'Verwijder afgevinkt';
+  - [x] slechts één knop armed tegelijk (ander item armen herstelt het eerste);
+  - [x] laadscherm bij app-start (ook na hard refresh), niet scrollbaar, spinner rechtsonder;
+  - [x] offline sync → `Fout bij synchroniseren`, inklap naar dot, geen `TypeError`;
+  - [x] accountmenu volgorde + oranje actieve knop + geen blauwe flash op Android;
+  - [x] titel 'Mijn lijstjes' niet meer afgeknipt; checkboxen vierkant met afgeronde hoeken;
+  - [x] inlogpagina zonder registratieknop en zonder bevestigingstekst (geen hint).
+- [x] **H3** **Akkoord gebruiker: "webversie ziet er goed uit"** → gedaan; gebruiker test de
+      registratie **bewust pas op het apparaat nà de Android-build** (browser-deep-link is niet
+      representatief). Daarom blijven de vijf registratie-bullets hierboven open tot H3a.
+- [ ] **H3a** Device-test van het deep link (kan niet in de browser) — **uit te voeren met de
+      gebouwde debug-APK van fase H**:
   - [ ] `com.lijstjes.app://invite?token=<echt token>` opent de app op het `RegisterView`;
   - [ ] een link zonder of met een ongeldig token opent de inlogpagina met NL-melding;
   - [ ] de app cold starten via de link (`getLaunchUrl`) én al draaiend (`appUrlOpen`) werken allebei;
@@ -891,14 +894,25 @@ zoals `flushOutbox` dat doet), dan is dat een kleine losse wijziging buiten fase
 
 ## Fase H — Android 1.2 + build (GATED)
 
-- [ ] **I1** `android/app/build.gradle`: `versionName "1.2"` en `versionCode 2`.
-      **Tevens** `package.json` `version` → `1.2.0` (beide staan op 1.2; besluit genomen).
-- [ ] **I2** `npm run build` (typecheck clean) en `npm run android:sync`.
-- [ ] **I3** **STOP — wacht op expliciete goedkeuring van de gebruiker** voordat een APK gebouwd
-      wordt. `niet` uitvoeren zonder toestemming (AGENTS.md §10.2).
-- [ ] **I4** Na akkoord: `./gradlew assembleDebug` (debug-ondertekend met
-      `~/.android/debug.keystore`, zie `tasks.md` fase 4), `apksigner verify --print-certs`,
-      APK alleen lokaal bewaren (groot bestand, niet in de repo).
+- [x] **I1** `android/app/build.gradle`: `versionName "1.2"` en `versionCode 2` (stond op `0.1`/`1`).
+      **Tevens** `package.json` `version` → `1.2.0` **en** `package-lock.json` gesynct
+      (`npm install --package-lock-only`; `build.gradle` heeft géén release `signingConfig`).
+- [x] **I2** `npm run build` (typecheck clean, 320 ms) en `npm run android:sync`
+      (`dist/` → `android/app/src/main/assets/public/`, plugin `@capacitor/app@8.1.2` gevonden).
+- [x] **I3** **STOP — expliciete goedkeuring gevraagd en verkregen** (AGENTS.md §10.2):
+      signing-keuze voorgelegd, gebruiker koos **debug-APK**.
+- [x] **I4** Na akkoord:
+  - **JDK-omgeving:** de systeem-`java` is OpenJDK **25** — te nieuw voor Gradle 8.14.3 /
+    AGP 8.13 ("Unsupported class file major version 69"); er staat alleen een JRE-21
+    (`/usr/lib/jvm/java-21-openjdk-amd64` zonder javac) en geen passwordless sudo. Oplossing:
+    gebruik `JAVA_HOME=/opt/android-studio-for-platform/jbr` (Android Studio JBR = volwaardige
+    JDK 21). Build: `JAVA_HOME=… ./gradlew assembleDebug` → **BUILD SUCCESSFUL in 16 s**.
+  - `apksigner verify --print-certs` (build-tools 37.0.0): V2, **`CN=Android Debug`**
+    (SHA-256 `70ef43b4…`) → zelfde certificaat als de vorige debug-installatie, dus die is
+    overschrijfbaar.
+  - Artefact: `android/app/build/outputs/apk/debug/app-debug.apk` (4,0 MB, **lokaal, niet in
+    de repo**; `*.apk` staat in `.gitignore`).
+  - Deep-link-scheme gecontroleerd: `strings.xml` `custom_url_scheme` = `com.lijstjes.app`.
 
 ---
 
