@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { toUserFacingError } from "./errorMessages";
 import type { OutboxEntry } from "../types/sync";
 import type { List } from "../types/app";
 import type { Database } from "./database.types";
@@ -95,12 +96,62 @@ export async function flushOutbox(
   return { ok: true, error: null, syncedCount, queuedCount: 0, queue: [] };
 }
 
-/** Past één outbox-entry toe op Supabase. */
+/** Maximale wachttijd per server-actie voordat we de verbinding opgeven. */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Race een (mogelijk hangende) belofte met een timeout. Als de belofte niet op
+ * tijd klaar is, reject deze racer met een "timeout"-fout — de oorspronkelijke
+ * belofte blijft wel afhandelbaar (`.then`-handlers zijn attacht), dus nooit
+ * een unhandled rejection; zijn resultaat wordt simpelweg genegeerd.
+ */
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/** Past één outbox-entry toe op Supabase. Reject NOOIT (AGENTS.md §7.5/D2). */
 async function applyEntry(
   entry: OutboxEntry,
   userId: string,
   client: SupabaseClient<Database>,
 ): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    // D2-fix (fase D): een hangende network-request mag de flush nooit kunnen
+    // blokkeren (anders blijft `runFlush` op "syncing" hangen). Na de timeout
+    // wordt de entry als mislukt gemarkeerd en gaat de backoff-cyclus verder.
+    const error = await withTimeout(
+      applyToClient(entry, userId, client),
+      REQUEST_TIMEOUT_MS,
+    );
+    return error
+      ? { ok: false, error: toUserFacingError(error) }
+      : { ok: true, error: null };
+  } catch (err) {
+    // Netwerk weg (bv. `TypeError: Failed to fetch`) of timeout: supabase-js
+    // gooit hier i.p.v. een error-object terug te geven. Map naar leesbare
+    // NL-tekst; de rejection mag nooit doorslaan naar `flushOutbox`/`runFlush`.
+    return { ok: false, error: toUserFacingError(err) };
+  }
+}
+
+/** Voert één outbox-entry uit; geeft de raw Supabase-fout terug (of null). */
+async function applyToClient(
+  entry: OutboxEntry,
+  userId: string,
+  client: SupabaseClient<Database>,
+): Promise<{ message: string } | null> {
   let error: { message: string } | null = null;
 
   switch (entry.type) {
@@ -189,9 +240,7 @@ async function applyEntry(
     }
   }
 
-  return error
-    ? { ok: false, error: error.message }
-    : { ok: true, error: null };
+  return error;
 }
 
 /** De vorm die Supabase teruggeeft bij het opvragen van lijsten + items. */
@@ -214,38 +263,50 @@ export async function pullListsFromServer(
   userId: string,
   client: SupabaseClient<Database>,
 ): Promise<{ data: List[]; error: string | null }> {
-  // Items komen via de geneste relatie mee; RLS schermt ook daar af.
-  // De expliciete `.eq("owner_id", userId)` is de eerste verdedigingslaag
-  // (defense in depth, zie AGENTS.md §7.1).
-  const { data, error } = await client
-    .from("lists")
-    .select(
-      "id,title,created_at,list_items(id,list_id,text,done,position,created_at)",
-    )
-    .eq("owner_id", userId)
-    .order("position", { ascending: true })
-    .order("created_at", { ascending: false });
+  try {
+    // Items komen via de geneste relatie mee; RLS schermt ook daar af.
+    // De expliciete `.eq("owner_id", userId)` is de eerste verdedigingslaag
+    // (defense in depth, zie AGENTS.md §7.1).
+    // Net als bij `applyEntry`: een hangende/afgebroken request mag hydrate en
+    // refreshData niet kunnen blokkeren; daarom ook hier een timeout.
+    const { data, error } = await withTimeout(
+      Promise.resolve(
+        client
+          .from("lists")
+          .select(
+            "id,title,created_at,list_items(id,list_id,text,done,position,created_at)",
+          )
+          .eq("owner_id", userId)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: false }),
+      ),
+      REQUEST_TIMEOUT_MS,
+    );
 
-  if (error) return { data: [], error: error.message };
+    if (error) return { data: [], error: toUserFacingError(error) };
 
-  const rows = (data ?? []) as unknown as ServerList[];
-  const lists: List[] = rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    createdAt: row.created_at,
-    items: [...(row.list_items ?? [])]
-      .sort((a, b) => a.position - b.position)
-      .map((item) => ({
-        id: item.id,
-        listId: item.list_id,
-        text: item.text,
-        done: item.done,
-        position: item.position,
-        createdAt: item.created_at,
-      })),
-  }));
+    const rows = (data ?? []) as unknown as ServerList[];
+    const lists: List[] = rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      createdAt: row.created_at,
+      items: [...(row.list_items ?? [])]
+        .sort((a, b) => a.position - b.position)
+        .map((item) => ({
+          id: item.id,
+          listId: item.list_id,
+          text: item.text,
+          done: item.done,
+          position: item.position,
+          createdAt: item.created_at,
+        })),
+    }));
 
-  return { data: lists, error: null };
+    return { data: lists, error: null };
+  } catch (err) {
+    // Netwerk weg / timeout: nooit een rejection doorslaan naar de caller.
+    return { data: [], error: toUserFacingError(err) };
+  }
 }
 
 /** Backoff in milliseconden bij een gefaalde operatie. */

@@ -2,16 +2,15 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 import { useSync, type SyncStatus } from "../composables/useSync";
-import type { OutboxEntry } from "../types/sync";
 
-const { status, lastSyncedAt, lastError, queueLength, failedOps, syncNow } =
-  useSync();
+const { status, lastSyncedAt, queueLength, syncNow } = useSync();
 
 const isSyncing = computed(() => status.value === "syncing");
 
 /**
- * Na 1,5 seconde stabiel 'Gesynchroniseerd' verdwijnt het tekstlabel en blijft
- * alleen de groene dot over. Elke statuswissel start de timer opnieuw.
+ * Na 1,5 seconde stabiele status verdwijnt het tekstlabel en blijft alleen de
+ * dot over (AGENTS.md §7.4). Dat geldt zowel voor `synced` als voor `error` —
+ * één implementatie, geen tweede timer/logica.
  */
 const COLLAPSE_AFTER_MS = 1500;
 const collapsed = ref(false);
@@ -23,7 +22,7 @@ watch(
     clearTimeout(collapseTimer);
     collapseTimer = undefined;
     collapsed.value = false;
-    if (value === "synced") {
+    if (value === "synced" || value === "error") {
       collapseTimer = setTimeout(() => {
         collapsed.value = true;
       }, COLLAPSE_AFTER_MS);
@@ -38,7 +37,7 @@ const labels: Record<SyncStatus, string> = {
   synced: "Gesynchroniseerd",
   pending: "In wachtrijst",
   syncing: "Synchroniseren…",
-  error: "Fout",
+  error: "Fout bij synchroniseren",
 };
 
 const label = computed(() => labels[status.value]);
@@ -71,36 +70,10 @@ const ariaLabel = computed(
     `${label.value}. ${actionLabel.value}. Laatste synchronisatie: ` +
     `${fullTimestamp(lastSyncedAt.value)}.`,
 );
-
-function opLabel(op: OutboxEntry): string {
-  switch (op.type) {
-    case "list.create":
-      return "Lijst aanmaken";
-    case "list.update":
-      return "Lijst hernoemen";
-    case "list.delete":
-      return "Lijst verwijderen";
-    case "item.create":
-      return "Item toevoegen";
-    case "item.update":
-      return "Item aanpassen";
-    case "item.delete":
-      return "Item verwijderen";
-    case "list.reorder":
-      return "Volgorde lijsten";
-    case "item.reorder":
-      return "Volgorde items";
-  }
-}
-
-function truncate(text: string | null, max = 70): string {
-  if (!text) return "onbekende fout";
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
 </script>
 
 <template>
-  <div class="sync-indicator" :data-status="status">
+  <div class="sync-indicator" :data-status="status" aria-live="polite">
     <div class="sync-row" :class="{ 'is-collapsed': collapsed && !isSyncing }">
       <button
         class="sync-pill"
@@ -120,14 +93,5 @@ function truncate(text: string | null, max = 70): string {
         </template>
       </button>
     </div>
-
-    <p v-if="status === 'error' && lastError" class="sync-error">
-      {{ lastError }}
-    </p>
-    <ul v-if="status === 'error' && failedOps.length" class="sync-failures">
-      <li v-for="op in failedOps" :key="op.opId">
-        {{ opLabel(op) }} — {{ truncate(op.lastError) }}
-      </li>
-    </ul>
   </div>
 </template>
