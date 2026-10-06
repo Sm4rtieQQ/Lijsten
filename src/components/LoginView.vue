@@ -3,28 +3,19 @@ import { reactive, ref } from "vue";
 
 import { useAuth } from "../composables/useAuth";
 
-const { error, configured, signIn, signUp, resetPassword } = useAuth();
+const { error, configured, signIn, resetPassword } = useAuth();
 
 const form = reactive({
   email: "",
   password: "",
   message: "",
-  submit: "",
 });
 const showPassword = ref(false);
 
 async function onLogin() {
   form.message = "Bezig met inloggen…";
   const ok = await signIn(form.email.trim(), form.password);
-  if (!ok) form.message = error.value ?? "Inloggen mislukt.";
-  else form.message = "";
-}
-
-async function onSignUp() {
-  form.message = "Account wordt aangemaakt…";
-  const ok = await signUp(form.email.trim(), form.password);
-  if (!ok) form.message = error.value ?? "";
-  else form.message = "";
+  form.message = ok ? "" : (error.value ?? "Inloggen mislukt.");
 }
 
 async function onForgot() {
@@ -32,8 +23,10 @@ async function onForgot() {
     form.message = "Vul eerst je e-mailadres in.";
     return;
   }
-  const ok = await resetPassword(form.email.trim());
-  form.message = ok ? (error.value ?? "") : (error.value ?? "");
+  await resetPassword(form.email.trim());
+  // De tekst over de beperkte aflevering staat in `useAuth.resetPassword`, zodat
+  // er één bron van waarheid is.
+  form.message = error.value ?? "";
 }
 </script>
 
@@ -95,9 +88,6 @@ async function onForgot() {
         <button class="dialog-submit" type="submit">
           Inloggen <span>&#8594;</span>
         </button>
-        <button class="secondary-button" type="button" @click="onSignUp">
-          Registreren
-        </button>
       </form>
 
       <button
@@ -107,9 +97,6 @@ async function onForgot() {
       >
         Wachtwoord vergeten?
       </button>
-      <p class="login-note">
-        Een nieuw account vereist mogelijk bevestiging via e-mail.
-      </p>
     </div>
   </section>
 </template>

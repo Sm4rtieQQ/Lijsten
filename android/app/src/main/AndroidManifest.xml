@@ -22,6 +22,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Deep link voor de registratie-uitnodiging:
+                 com.lijstjes.app://invite?token=…  (zie AGENTS.md §8.11)
+                 Bewust ZONDER android:autoVerify: dat geldt alleen voor App Links
+                 op een gedomein dat je bezit, en zou de custom scheme laten
+                 falen. De waarde komt uit custom_url_scheme in strings.xml. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/custom_url_scheme" />
+            </intent-filter>
+
         </activity>
 
         <provider
