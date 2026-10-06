@@ -1,3 +1,5 @@
+/// <reference types="vitest/config" />
+
 import { fileURLToPath, URL } from "node:url";
 
 import vue from "@vitejs/plugin-vue";
@@ -16,5 +18,11 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+  },
+  // Vitest (fase G): jsdom-omgeving; de spec-bestanden staan naast de code.
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.spec.ts"],
+    restoreMocks: true,
   },
 });
