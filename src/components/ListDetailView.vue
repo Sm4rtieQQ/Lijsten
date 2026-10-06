@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
+import { useArmedConfirm } from "../composables/useArmedConfirm";
 import { useLists } from "../composables/useLists";
 import SyncIndicator from "./SyncIndicator.vue";
 import type { ListItem } from "../types/app";
@@ -32,12 +33,57 @@ const doneCount = computed(
 );
 const canClear = computed(() => doneCount.value > 0);
 
+// --- Dubbele bevestiging (§8.6): één armed knop tegelijk, 5s timeout ---
+const CLEAR_KEY = "clear";
+
+function itemKey(itemId: string): string {
+  return `item:${itemId}`;
+}
+
+const { armedId, arm, disarm, isArmed, dispose } = useArmedConfirm(onConfirmed);
+
+function onConfirmed(key: string): void {
+  if (key === CLEAR_KEY) {
+    clearCompletedItems();
+    return;
+  }
+  if (key.startsWith("item:")) removeItem(key.slice("item:".length));
+}
+
+function removeItem(itemId: string): void {
+  if (editingItemId.value === itemId) editingItemId.value = null;
+  deleteItem(itemId);
+}
+
+function clearCompletedItems(): void {
+  const id = activeListId.value;
+  if (id) clearCompleted(id);
+}
+
+onBeforeUnmount(dispose);
+
 // Bij schakelen naar een andere lijst alle lokale edit/drag-state resetten.
 watch(activeListId, () => {
   newItemText.value = "";
   editingItemId.value = null;
   draggingItemId.value = null;
   dragOverItemId.value = null;
+  disarm();
+});
+
+// Gewapende knop herstellen als het bijbehorende item verdwijnt, of als er
+// niets meer afgevinkt is (de clear-knop is dan sowieso uitgeschakeld).
+watch(
+  () => list.value?.items.map((item) => item.id) ?? [],
+  (ids) => {
+    const key = armedId.value;
+    if (key?.startsWith("item:") && !ids.includes(key.slice("item:".length))) {
+      disarm();
+    }
+  },
+);
+watch(canClear, (value) => {
+  if (!value) disarm();
 });
 
 watch(editingItemId, (id) => {
@@ -76,8 +122,8 @@ function onToggle(item: ListItem): void {
 }
 
 function onDeleteItem(item: ListItem): void {
-  if (editingItemId.value === item.id) editingItemId.value = null;
-  deleteItem(item.id);
+  // Eerste klik: wapenen. Tweede klik (dezelfde key): verwijderen.
+  arm(itemKey(item.id));
 }
 
 function startEdit(item: ListItem): void {
@@ -98,8 +144,9 @@ function cancelEdit(): void {
 }
 
 function onClearCompleted(): void {
-  const id = activeListId.value;
-  if (id) clearCompleted(id);
+  if (!canClear.value) return;
+  // Eerste klik: wapenen. Tweede klik: afgevinkte items verwijderen.
+  arm(CLEAR_KEY);
 }
 
 // --- Drag & drop (items herschikken) ---
@@ -186,8 +233,15 @@ function onItemDrop(targetId: string): void {
         <span>{{ itemCount === 1 ? "1 item" : `${itemCount} items` }}</span>
         <button
           class="clear-button"
+          :class="{ 'is-armed': isArmed(CLEAR_KEY) }"
           type="button"
           :disabled="!canClear"
+          :aria-pressed="isArmed(CLEAR_KEY) ? 'true' : 'false'"
+          :aria-label="
+            isArmed(CLEAR_KEY)
+              ? 'Bevestigen: afgevinkte items verwijderen'
+              : 'Verwijder afgevinkte items'
+          "
           @click="onClearCompleted"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -278,8 +332,14 @@ function onItemDrop(targetId: string): void {
           </button>
           <button
             class="item-delete-button"
+            :class="{ 'is-armed': isArmed(itemKey(item.id)) }"
             type="button"
-            aria-label="Item verwijderen"
+            :aria-pressed="isArmed(itemKey(item.id)) ? 'true' : 'false'"
+            :aria-label="
+              isArmed(itemKey(item.id))
+                ? 'Bevestigen: item verwijderen'
+                : 'Item verwijderen'
+            "
             @click.stop="onDeleteItem(item)"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
