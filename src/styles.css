@@ -24,6 +24,9 @@ input {
 }
 button {
   cursor: pointer;
+  /* Geen blauwe tap-flash op Android/Capacitor; touch i.p.v. 300ms-delay. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .app-shell {
   width: min(100%, 760px);
@@ -63,6 +66,10 @@ button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Clip-ruimte voor de descender van de 'j' (F1): de inkvlek kan tot ~9px
+     onder de contentbox vallen zonder te worden afgeknipt; de eyebrow staat
+     daardoor zonder eigen bovenmarge direct onder het h1-doosje. */
+  padding-bottom: 9px;
 }
 .eyebrow {
   margin: 0 0 7px;
@@ -79,7 +86,7 @@ h2 {
 h1 {
   margin: 0;
   font-size: 42px;
-  line-height: 1;
+  line-height: 1.12; /* ruimer dan 1: de descender van de 'j' blijft heel (F1) */
 }
 h2 {
   margin: 0;
@@ -229,7 +236,10 @@ h2 {
   stroke-linejoin: round;
 }
 .panel-header {
-  margin: 2px 8px 0;
+  /* Ruimte + subtiele lijn tussen '+ Nieuw lijstje' en het Account-blok (E-aanpassing). */
+  margin: 10px 8px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
   font-size: 10px;
 }
 .sync-indicator {
@@ -351,21 +361,6 @@ h2 {
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
-.sync-error {
-  max-width: 260px;
-  margin: 0;
-  color: #a3382f;
-  font-size: 11px;
-  text-align: right;
-}
-.sync-failures {
-  max-width: 260px;
-  margin: 0;
-  padding-left: 16px;
-  color: #a3382f;
-  font-size: 11px;
-  text-align: right;
-}
 .topbar-right {
   display: flex;
   align-items: center;
@@ -478,6 +473,13 @@ h2 {
 .icon-button:hover {
   color: var(--orange);
   border-color: #e7b69d;
+}
+/* Actief zolang het accountmenu open is; bij sluiten vervalt de klasse en
+   geldt weer de normale `.icon-button`-stijl (E3). */
+.icon-button.is-active {
+  color: #fff;
+  background: var(--orange);
+  border-color: var(--orange);
 }
 .icon-button svg {
   width: 100%;
@@ -612,11 +614,12 @@ h2 {
   flex: none;
   padding: 0;
   border: 1.8px solid #c8b9aa;
-  border-radius: 50%;
+  border-radius: 5px; /* F2: vierkant met afgeronde hoeken, niet rond */
   display: grid;
   place-items: center;
   color: #fff;
   background: transparent;
+  transition: 0.18s;
 }
 .check-button svg {
   width: 15px;
@@ -788,7 +791,9 @@ dialog {
   background: var(--orange-soft);
 }
 .below-title {
-  margin: 9px 0 0;
+  /* Geen eigen bovenmarge meer: de ruimte zit nu in `padding-bottom` van het
+     h1 (F1), zodat een diepe descender nooit achter de eyebrow verdwijnt. */
+  margin: 0;
 }
 .home-actions {
   position: relative;
@@ -811,10 +816,10 @@ dialog {
   display: none;
 }
 .current-user-email {
-  padding: 5px 8px 10px;
+  padding: 2px 8px 4px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
   text-overflow: ellipsis;
 }
 .panel-action {
@@ -827,11 +832,17 @@ dialog {
   font-size: 14px;
 }
 .panel-action:hover {
-  background: var(--paper);
+  background: var(--orange-soft);
+  color: var(--orange-dark);
 }
 .panel-add {
   color: var(--orange);
   font-weight: 700;
+}
+.panel-logout {
+  /* Klein en rustig, gelijk aan het Account-label en de e-mailregel. */
+  color: var(--muted);
+  font-size: 10px;
 }
 .detail-actions {
   display: flex;
@@ -926,6 +937,8 @@ dialog {
   width: 20px;
   height: 20px;
   border-width: 1.6px;
+  border-radius: 5px; /* F2: ook op de eindgrootte vierkant met afgeronde hoeken */
+  transition: 0.18s;
 }
 .check-button svg {
   width: 12px;
@@ -957,6 +970,35 @@ dialog {
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+/* Fase B: twee-staps verwijderen (§8.6). De armed-stijl is ook zónder hover
+   zichtbaar — een touchscherm heeft geen hover. Focus-ring blijft ongewijzigd. */
+.item-delete-button,
+.clear-button {
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease,
+    padding 0.18s ease;
+}
+.item-delete-button.is-armed {
+  opacity: 1;
+  color: #fff;
+  background: var(--orange);
+}
+.item-delete-button.is-armed:hover {
+  color: #fff;
+  background: var(--orange-dark);
+}
+.clear-button.is-armed {
+  padding: 4px 8px;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--orange);
+}
+.clear-button.is-armed:hover {
+  color: #fff;
+  background: var(--orange-dark);
 }
 .refresh-status[hidden] {
   display: none;
@@ -1072,4 +1114,68 @@ dialog {
 }
 .logout-button:hover {
   color: var(--orange);
+}
+
+/* ---------- Fase C: laadscherm (§8.7) ---------- */
+/* Visueel verborgen, maar voorgelezen door screenreaders. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* Zolang de splash dekt, mag de onderliggende pagina niet scrollen (C2). */
+body.no-scroll {
+  overflow: hidden;
+}
+.loading-screen {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  height: 100vh; /* fallback voor browsers zonder dvh */
+  height: 100dvh;
+  display: grid;
+  place-content: center;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--paper);
+}
+.loading-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.loading-title {
+  margin: 0;
+  font-size: 42px;
+  line-height: 1.1; /* ruimer dan `h1 { line-height: 1 }`; de 'j' blijft heel (§8.10) */
+}
+.loading-rule {
+  width: 46px;
+  height: 3px;
+  border-radius: 4px;
+  align-self: flex-start; /* links uitlijnen met de titel; zelfde afmeting */
+  background: var(--orange); /* zelfde streep als op de detailpagina */
+}
+.loading-spinner {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgba(230, 109, 53, 0.28);
+  border-top-color: var(--orange);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+  }
 }

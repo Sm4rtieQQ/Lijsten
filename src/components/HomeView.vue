@@ -13,6 +13,7 @@ const { lists, setActiveList, createNewList, reorderLists, deleteList } =
 
 const accountOpen = ref(false);
 const accountRef = ref<HTMLElement | null>(null);
+const accountButtonRef = ref<HTMLButtonElement | null>(null);
 const newListTitle = ref("");
 const newListDialog = ref<HTMLDialogElement | null>(null);
 const newListInput = ref<HTMLInputElement | null>(null);
@@ -27,8 +28,22 @@ function onDocumentClick(event: MouseEvent): void {
     accountOpen.value = false;
   }
 }
-onMounted(() => document.addEventListener("click", onDocumentClick));
-onBeforeUnmount(() => document.removeEventListener("click", onDocumentClick));
+
+function onDocumentKeydown(event: KeyboardEvent): void {
+  // ESC sluit het menu en zet de focus terug op de accountknop (E4).
+  if (event.key === "Escape" && accountOpen.value) {
+    accountOpen.value = false;
+    accountButtonRef.value?.focus();
+  }
+}
+onMounted(() => {
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onDocumentKeydown);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("click", onDocumentClick);
+  document.removeEventListener("keydown", onDocumentKeydown);
+});
 
 function toggleAccount(): void {
   accountOpen.value = !accountOpen.value;
@@ -123,19 +138,20 @@ function onListDrop(targetId: string): void {
         <SyncIndicator />
         <div class="home-actions" ref="accountRef">
           <button
+            ref="accountButtonRef"
             class="icon-button"
+            :class="{ 'is-active': accountOpen }"
             type="button"
             aria-label="Account en acties"
             :aria-expanded="accountOpen"
+            aria-controls="account-panel"
             @click="toggleAccount"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
-          <div class="account-panel" :hidden="!accountOpen">
-            <p class="eyebrow panel-header">ACCOUNT</p>
-            <span class="current-user-email">{{ user?.email }}</span>
+          <div class="account-panel" :hidden="!accountOpen" id="account-panel">
             <button
               class="panel-action panel-add"
               type="button"
@@ -143,7 +159,13 @@ function onListDrop(targetId: string): void {
             >
               + Nieuw lijstje
             </button>
-            <button class="panel-action" type="button" @click="onLogout">
+            <p class="eyebrow panel-header">Account</p>
+            <span class="current-user-email">{{ user?.email }}</span>
+            <button
+              class="panel-action panel-logout"
+              type="button"
+              @click="onLogout"
+            >
               Uitloggen
             </button>
           </div>
