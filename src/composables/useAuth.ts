@@ -71,18 +71,31 @@ function isNativePlatform(): boolean {
 }
 
 /**
+ * Doel van de web-redirect: origin **plus** pad van de huidige pagina.
+ *
+ * Alleen de origin is te weinig wanneer de app onder een subpad draait — zoals de
+ * GitHub Pages-projectpagina `/Lijsten/` — want dan wijst de mail naar de root
+ * (404). Leeg in omgevingen zonder `location` (bv. Node).
+ */
+export function webRedirectTarget(
+  location: { origin?: string; pathname?: string } | undefined,
+): string | null {
+  if (!location?.origin) return null;
+  return `${location.origin}${location.pathname ?? ""}`;
+}
+
+/**
  * Waar Supabase de bevestigings- en herstelmail naartoe stuurt.
  *
  * Native: het eigen scheme `com.lijstjes.app://` (deep link, AGENTS.md §8.11).
- * Web: de origin van de dev-server, zodat registreren en bevestigen in
- * `npm run dev` te testen is.
+ * Web: de volledige pagina-URL, zodat registreren en bevestigen zowel in
+ * `npm run dev` als op de GitHub Pages-projectpagina blijft werken (AGENTS.md §10.3).
  */
 function emailRedirectTo(): string {
   if (isNativePlatform()) return `${APP_SCHEME}://`;
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
-  }
-  return `${APP_SCHEME}://`;
+  const target =
+    typeof window !== "undefined" ? webRedirectTarget(window.location) : null;
+  return target ?? `${APP_SCHEME}://`;
 }
 
 export function useAuth() {

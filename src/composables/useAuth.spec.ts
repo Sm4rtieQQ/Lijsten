@@ -28,7 +28,7 @@ vi.mock("../lib/supabase", () => ({
   isSupabaseConfigured: true,
 }));
 
-import { useAuth } from "./useAuth";
+import { useAuth, webRedirectTarget } from "./useAuth";
 
 describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)", () => {
   const AUTH = useAuth();
@@ -66,7 +66,9 @@ describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)",
     const arg = mockSignUp.mock.calls[0]?.[0];
     expect(arg.email).toBe("nieuw@voorbeeld.nl");
     expect(arg.password).toBe("geheim123");
-    expect(typeof arg.options.emailRedirectTo).toBe("string");
+    expect(arg.options.emailRedirectTo).toBe(
+      `${window.location.origin}${window.location.pathname}`,
+    );
     expect(AUTH.verificationEmail.value).toBe("nieuw@voorbeeld.nl");
   });
 
@@ -229,5 +231,27 @@ describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)",
 
     expect(auth.initialized.value).toBe(true);
     expect(auth.user.value).toBeNull();
+  });
+});
+
+describe("webRedirectTarget — web-redirect incl. subpad (AGENTS.md §8.12/§10.3)", () => {
+  it("neemt het pad mee, zodat een projectpagina onder /Lijsten/ werkt", () => {
+    expect(
+      webRedirectTarget({
+        origin: "https://sm4rtieqq.github.io",
+        pathname: "/Lijsten/",
+      }),
+    ).toBe("https://sm4rtieqq.github.io/Lijsten/");
+  });
+
+  it("werkt ook op de root (dev-server)", () => {
+    expect(
+      webRedirectTarget({ origin: "http://localhost:5173", pathname: "/" }),
+    ).toBe("http://localhost:5173/");
+  });
+
+  it("geeft null zonder origin (geen location)", () => {
+    expect(webRedirectTarget(undefined)).toBeNull();
+    expect(webRedirectTarget({})).toBeNull();
   });
 });
