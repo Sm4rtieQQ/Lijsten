@@ -15,5 +15,12 @@ export const isSupabaseConfigured: boolean = Boolean(
 );
 
 export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured
-  ? createClient<Database>(supabaseUrl, supabaseAnonKey)
+  ? createClient<Database>(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // De app handelt de deep-link/herstel-hash zelf af in `useDeepLink`
+        // (AGENTS.md §8.11). Zo is er één plek die de tokens leest en blijft de
+        // webvariant in `npm run dev` deterministisch.
+        detectSessionInUrl: false,
+      },
+    })
   : null;

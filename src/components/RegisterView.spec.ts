@@ -1,20 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 
-const { mockRpc, mockSignUp } = vi.hoisted(() => ({
-  mockRpc: vi.fn(),
-  mockSignUp: vi.fn(),
-}));
+const { mockSignUp } = vi.hoisted(() => ({ mockSignUp: vi.fn() }));
 
 vi.mock("../lib/supabase", () => ({
   supabase: {
-    rpc: mockRpc,
     auth: {
       signUp: mockSignUp,
       signInWithPassword: vi.fn(),
+      resend: vi.fn(),
       signOut: vi.fn(),
       updateUser: vi.fn(),
       resetPasswordForEmail: vi.fn(),
+      setSession: vi.fn(),
       onAuthStateChange: vi.fn(),
       getSession: vi.fn(),
     },
@@ -23,27 +21,17 @@ vi.mock("../lib/supabase", () => ({
 }));
 
 import RegisterView from "./RegisterView.vue";
-import {
-  __resetDeepLinkState,
-  handleIncomingUrl,
-} from "../composables/useDeepLink";
 import { useAuth } from "../composables/useAuth";
 
 const AUTH = useAuth();
 
-/** Zet een geldige uitnodiging klaar (claim antwoordt met het juiste e-mailadres). */
-function validClaim(email: string): void {
-  mockRpc.mockResolvedValue({
-    data: { valid: true, email },
-    error: null,
-  });
-}
-
-async function fillAndSubmit(
+async function submit(
   wrapper: ReturnType<typeof mount>,
+  email: string,
   password = "geheim123",
   repeat = password,
 ): Promise<void> {
+  await wrapper.find('input[type="email"]').setValue(email);
   await wrapper.find('input[aria-label="Wachtwoord"]').setValue(password);
   await wrapper
     .find('input[aria-label="Wachtwoord herhalen"]')
@@ -52,70 +40,46 @@ async function fillAndSubmit(
   await flushPromises();
 }
 
-describe("RegisterView (registratie via uitnodiging, AGENTS.md §7.6)", () => {
+describe("RegisterView — open registratie (AGENTS.md §7.6)", () => {
   beforeEach(() => {
-    mockRpc.mockReset();
     mockSignUp.mockReset();
-    __resetDeepLinkState();
     AUTH.error.value = null;
+    AUTH.verificationEmail.value = null;
   });
 
   afterEach(() => {
     AUTH.error.value = null;
+    AUTH.verificationEmail.value = null;
   });
 
-  it("toont bij een ongeldige link een NL-melding en roept nooit signUp aan", async () => {
+  it("laat het e-mailadres vrij invulbaar (geen uitnodiging meer)", async () => {
     const wrapper = mount(RegisterView);
-    await flushPromises();
+    const emailInput = wrapper.find('input[type="email"]');
 
-    expect(wrapper.get(".login-message").text()).toContain(
-      "Deze link is niet (meer) geldig. Vraag een nieuwe uitnodiging.",
-    );
-
-    // Zelfs een volledig ingevuld formulier levert niets op zonder token.
-    await wrapper.find('input[type="email"]').setValue("iemand@voorbeeld.nl");
-    await fillAndSubmit(wrapper);
-
-    expect(wrapper.get(".login-message").text()).toBe(
-      "Deze uitnodiging is ongeldig of verlopen.",
-    );
-    expect(mockRpc).not.toHaveBeenCalled();
-    expect(mockSignUp).not.toHaveBeenCalled();
+    expect(emailInput.attributes("readonly")).toBeUndefined();
+    expect(wrapper.text()).not.toContain("uitnodiging");
   });
 
-  it("vult het e-mailadres uit de uitnodiging en signUp gebruikt dát adres", async () => {
-    const email = "genodigde@voorbeeld.nl";
-    validClaim(email);
+  it("roept signUp aan met het ingevulde adres en zet verificationEmail", async () => {
     mockSignUp.mockResolvedValue({
-      data: { session: { user: { email } } },
+      data: { session: null, user: { id: "u1" } },
       error: null,
     });
 
-    await handleIncomingUrl(`http://localhost:5173/?invite=TOKEN-123`);
     const wrapper = mount(RegisterView);
-    await flushPromises();
-
-    const emailInput = wrapper.find('input[type="email"]');
-    expect((emailInput.element as HTMLInputElement).value).toBe(email);
-    // Het adres uit de uitnodiging is niet meer te wijzigen.
-    expect(emailInput.attributes("readonly")).toBeDefined();
-
-    await fillAndSubmit(wrapper, "geheim123");
+    await submit(wrapper, "nieuw@voorbeeld.nl");
 
     expect(mockSignUp).toHaveBeenCalledTimes(1);
-    expect(mockSignUp).toHaveBeenCalledWith({
-      email,
+    expect(mockSignUp.mock.calls[0]?.[0]).toMatchObject({
+      email: "nieuw@voorbeeld.nl",
       password: "geheim123",
     });
+    expect(AUTH.verificationEmail.value).toBe("nieuw@voorbeeld.nl");
   });
 
   it("geeft een inline fout bij verschillende wachtwoorden, zonder signUp", async () => {
-    validClaim("genodigde@voorbeeld.nl");
-    await handleIncomingUrl(`http://localhost:5173/?invite=TOKEN-123`);
     const wrapper = mount(RegisterView);
-    await flushPromises();
-
-    await fillAndSubmit(wrapper, "geheim123", "geheim124");
+    await submit(wrapper, "nieuw@voorbeeld.nl", "geheim123", "geheim124");
 
     expect(wrapper.get(".login-message").text()).toBe(
       "De wachtwoorden verschillen.",
@@ -123,13 +87,9 @@ describe("RegisterView (registratie via uitnodiging, AGENTS.md §7.6)", () => {
     expect(mockSignUp).not.toHaveBeenCalled();
   });
 
-  it("geeft een inline fout bij een wachtwoord korter dan 6 tekens, zonder signUp", async () => {
-    validClaim("genodigde@voorbeeld.nl");
-    await handleIncomingUrl(`http://localhost:5173/?invite=TOKEN-123`);
+  it("geeft een inline fout bij een wachtwoord korter dan 6 tekens", async () => {
     const wrapper = mount(RegisterView);
-    await flushPromises();
-
-    await fillAndSubmit(wrapper, "12345");
+    await submit(wrapper, "nieuw@voorbeeld.nl", "12345");
 
     expect(wrapper.get(".login-message").text()).toBe(
       "Het wachtwoord moet minimaal 6 tekens hebben.",
@@ -137,29 +97,54 @@ describe("RegisterView (registratie via uitnodiging, AGENTS.md §7.6)", () => {
     expect(mockSignUp).not.toHaveBeenCalled();
   });
 
-  it("vertaalt de no_active_invite-triggerfout naar de NL-uitnodigingstekst", async () => {
-    const email = "genodigde@voorbeeld.nl";
-    validClaim(email);
-    mockRpc.mockResolvedValue({
-      data: { valid: true, email },
-      error: null,
-    });
+  it("toont een NL-melding bij een bestaand account (geen ruwe fout)", async () => {
     mockSignUp.mockResolvedValue({
-      data: { session: null },
+      data: { session: null, user: null },
       error: {
-        message: "Database error saving new user",
-        code: "no_active_invite",
+        message: "User already registered",
+        code: "user_already_exists",
       },
     });
 
-    await handleIncomingUrl(`http://localhost:5173/?invite=TOKEN-123`);
     const wrapper = mount(RegisterView);
-    await flushPromises();
-
-    await fillAndSubmit(wrapper, "geheim123");
+    await submit(wrapper, "bestaat@voorbeeld.nl");
 
     expect(wrapper.get(".login-message").text()).toBe(
-      "Deze uitnodiging is ongeldig of verlopen.",
+      "Er bestaat al een account met dit e-mailadres.",
     );
+  });
+
+  it("heeft op beide wachtwoordvelden een oogje dat de zichtbaarheid wisselt", async () => {
+    const wrapper = mount(RegisterView);
+
+    const password = wrapper.get('input[aria-label="Wachtwoord"]');
+    const repeat = wrapper.get('input[aria-label="Wachtwoord herhalen"]');
+    const toggles = wrapper.findAll(".toggle-password-button");
+
+    expect(password.attributes("type")).toBe("password");
+    expect(repeat.attributes("type")).toBe("password");
+    // Eén oogje per wachtwoordveld.
+    expect(toggles).toHaveLength(2);
+
+    await toggles[0]?.trigger("click");
+    expect(
+      wrapper.get('input[aria-label="Wachtwoord"]').attributes("type"),
+    ).toBe("text");
+    // Het herhaalveld blijft onafhankelijk verborgen.
+    expect(
+      wrapper.get('input[aria-label="Wachtwoord herhalen"]').attributes("type"),
+    ).toBe("password");
+
+    await toggles[1]?.trigger("click");
+    expect(
+      wrapper.get('input[aria-label="Wachtwoord herhalen"]').attributes("type"),
+    ).toBe("text");
+  });
+
+  it("emit 'cancel' via de terug-knop", async () => {
+    const wrapper = mount(RegisterView);
+    await wrapper.get("button.forgot-password").trigger("click");
+
+    expect(wrapper.emitted("cancel")).toBeTruthy();
   });
 });

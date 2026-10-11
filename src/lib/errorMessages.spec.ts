@@ -5,7 +5,8 @@ import {
   AUTH_GENERIC_ERROR,
   CONNECTION_DROPPED,
   DUPLICATE_ERROR,
-  INVITE_INVALID,
+  EMAIL_NOT_CONFIRMED,
+  isEmailNotConfirmed,
   NETWORK_ERROR,
   SYNC_GENERIC_ERROR,
   toAuthErrorMessage,
@@ -79,18 +80,40 @@ describe("toUserFacingError (sync-laag, AGENTS.md §7.5)", () => {
   });
 });
 
-describe("toAuthErrorMessage (auth-laag, inclusief triggerfout)", () => {
-  it("vertaalt de triggerfout no_active_invite naar de uitnodigingstekst", () => {
-    const err = {
-      message: "Database error saving new user",
-      code: "no_active_invite",
-    };
-    expect(toAuthErrorMessage(err)).toBe(INVITE_INVALID);
+describe("toAuthErrorMessage (auth-laag, AGENTS.md §7.6)", () => {
+  it("vertaalt 'email not confirmed' naar de verificatietekst", () => {
+    expect(toAuthErrorMessage("Email not confirmed")).toBe(EMAIL_NOT_CONFIRMED);
+    expect(
+      toAuthErrorMessage({
+        message: "Email not confirmed",
+        code: "email_not_confirmed",
+      }),
+    ).toBe(EMAIL_NOT_CONFIRMED);
+  });
+
+  it("herkent de onbevestigde-status ook los (isEmailNotConfirmed)", () => {
+    expect(isEmailNotConfirmed({ code: "email_not_confirmed" })).toBe(true);
+    expect(
+      isEmailNotConfirmed({ message: "Email not confirmed", code: "" }),
+    ).toBe(true);
+    expect(isEmailNotConfirmed("Invalid login credentials")).toBe(false);
   });
 
   it("vertaalt 'invalid login credentials' naar de inlogtekst", () => {
     expect(toAuthErrorMessage("Invalid login credentials")).toBe(
-      "De inloggegevens of uitnodiging zijn onjuist.",
+      "De inloggegevens zijn onjuist.",
+    );
+  });
+
+  it("vertaalt 'user already registered' naar de bestaand-accounttekst", () => {
+    expect(toAuthErrorMessage("User already registered")).toBe(
+      "Er bestaat al een account met dit e-mailadres.",
+    );
+  });
+
+  it("vertaalt de rate limit naar een vriendelijke NL-tekst", () => {
+    expect(toAuthErrorMessage("Email rate limit exceeded")).toBe(
+      "Er zijn te veel verzoeken verstuurd. Probeer het later opnieuw.",
     );
   });
 

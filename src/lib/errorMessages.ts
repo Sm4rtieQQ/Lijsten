@@ -13,12 +13,9 @@ type Rule = {
   message: string;
 };
 
-/** Melding voor een ongeldige, gebruikte of verlopen uitnodiging. */
-export const INVITE_INVALID = "Deze uitnodiging is ongeldig of verlopen.";
-
-/** Melding wanneer de uitnodiging voor een ander e-mailadres geldt. */
-export const INVITE_WRONG_EMAIL =
-  "Deze uitnodiging is voor een ander e-mailadres.";
+/** Melding wanneer het e-mailadres nog niet bevestigd is (open registratie). */
+export const EMAIL_NOT_CONFIRMED =
+  "Je e-mailadres is nog niet bevestigd. Vraag een nieuwe verificatielink aan of klik op de link in je mail.";
 
 /** Nog niet herkende netwerkfout (offline/onderbreking). */
 export const NETWORK_ERROR =
@@ -99,14 +96,20 @@ const SYNC_RULES: readonly Rule[] = [
 
 const AUTH_RULES: readonly Rule[] = [
   {
+    test: ["email not confirmed", "email_not_confirmed", "not confirmed"],
+    message: EMAIL_NOT_CONFIRMED,
+  },
+  {
+    test: ["invalid login credentials"],
+    message: "De inloggegevens zijn onjuist.",
+  },
+  {
     test: [
-      "no_active_invite",
-      "invalid login credentials",
       "user_already_exists",
       "already registered",
       "already been registered",
     ],
-    message: "De inloggegevens of uitnodiging zijn onjuist.",
+    message: "Er bestaat al een account met dit e-mailadres.",
   },
   {
     test: [
@@ -126,13 +129,13 @@ const AUTH_RULES: readonly Rule[] = [
       "rate limit",
       "too many requests",
       "security purposes",
+      "over_email_send_rate_limit",
     ],
-    message:
-      "Er zijn te veel verzoeken verstuurd. Probeer het later opnieuw, of vraag een nieuwe uitnodiging aan.",
+    message: "Er zijn te veel verzoeken verstuurd. Probeer het later opnieuw.",
   },
   {
     test: ["expired", "token has expired"],
-    message: "Deze uitnodiging is ongeldig of verlopen.",
+    message: "Deze link is ongeldig of verlopen.",
   },
 ];
 
@@ -158,15 +161,11 @@ export function toUserFacingError(error: unknown): string {
 }
 
 /**
- * Specifiek voor de auth-laag: kent ook de triggerfout van de uitnodiging.
- * `no_active_invite` betekent dat er geen geldige claim + uitnodiging was, of dat
- * de uitnodiging al gebruikt of verlopen is. Dat is één melding voor de gebruiker.
+ * Specifiek voor de auth-laag: kent de fouten van Supabase Auth, waaronder
+ * "email not confirmed" bij een account dat nog niet bevestigd is.
  */
 export function toAuthErrorMessage(error: unknown): string {
   const text = extractMessage(error).toLowerCase();
-
-  if (text.includes("no_active_invite")) return INVITE_INVALID;
-  if (text.includes("invite")) return INVITE_INVALID;
 
   for (const rule of AUTH_RULES) {
     if (rule.test.some((needle) => text.includes(needle))) return rule.message;
@@ -178,14 +177,21 @@ export function toAuthErrorMessage(error: unknown): string {
   return AUTH_GENERIC_ERROR;
 }
 
+/** Is dit de Supabase-fout dat het e-mailadres nog niet bevestigd is? */
+export function isEmailNotConfirmed(error: unknown): boolean {
+  const text = extractMessage(error).toLowerCase();
+  return (
+    text.includes("email not confirmed") || text.includes("email_not_confirmed")
+  );
+}
+
 /**
  * Haal een bruikbare tekst uit een onbekende fout. Supabase geeft een `message`,
  * maar een `TypeError` of een netwerkfout heeft er soms geen of een
  * technische.
  *
- * Let op: de triggerfout `no_active_invite` komt als `code`, terwijl de
- * `message` dan alleen "Database error saving new user" zegt. Daarom lezen we
- * beide velden.
+ * Let op: sommige Supabase-fouten zetten de eigenlijke reden in `code` terwijl de
+ * `message` generiek is. Daarom lezen we beide velden.
  */
 function extractMessage(error: unknown): string {
   if (error === null || error === undefined) return "";

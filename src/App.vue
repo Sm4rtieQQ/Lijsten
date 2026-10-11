@@ -7,14 +7,25 @@ import LoginView from "./components/LoginView.vue";
 import RegisterView from "./components/RegisterView.vue";
 import ResetPasswordView from "./components/ResetPasswordView.vue";
 import SplashView from "./components/SplashView.vue";
+import VerifyEmailView from "./components/VerifyEmailView.vue";
 import { useAuth } from "./composables/useAuth";
 import { initDeepLink, useDeepLink } from "./composables/useDeepLink";
 import { useLists } from "./composables/useLists";
 import { bindSyncUser } from "./composables/useSync";
 
-const { user, initialized, recovery, init } = useAuth();
-const { inviteToken } = useDeepLink();
+const {
+  user,
+  initialized,
+  recovery,
+  verificationEmail,
+  justVerified,
+  init,
+  setJustVerified,
+} = useAuth();
 const { activeListId, hydrate, reset, refreshData } = useLists();
+
+// Registratie is een eigen scherm naast het inlogscherm (AGENTS.md §8.9).
+const registerOpen = ref(false);
 
 const sessionKey = ref(0);
 
@@ -67,6 +78,37 @@ function stopHydrating(): void {
   hydrating.value = false;
 }
 
+// Zodra er een verificatiemail is verstuurd, is het registratiescherm niet meer
+// nodig: App.vue toont dan de verificatiepagina. Zo komt de gebruiker na
+// "Terug naar inloggen" weer op het inlogscherm uit (i.p.v. het registratiescherm).
+watch(verificationEmail, (value) => {
+  if (value) registerOpen.value = false;
+});
+
+// Groene bevestiging na het klikken op de verificatielink (§7.6/§8.11). Pas
+// starten als het laadscherm weg is, anders gaat de zichtbare tijd verloren.
+const VERIFIED_BANNER_MS = 5000;
+let verifiedTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  [justVerified, showSplash],
+  ([verified, splash]) => {
+    if (!verified) {
+      if (verifiedTimer) {
+        clearTimeout(verifiedTimer);
+        verifiedTimer = null;
+      }
+      return;
+    }
+    if (splash || verifiedTimer) return;
+    verifiedTimer = setTimeout(() => {
+      verifiedTimer = null;
+      setJustVerified(false);
+    }, VERIFIED_BANNER_MS);
+  },
+  { immediate: true },
+);
+
 // Zolang het laadscherm dekt, het body-scrollen uitschakelen (C2): de vaste,
 // `overflow: hidden`-splash dekt weliswaar het scherm, maar scroll-input zou
 // anders nog bij de onderliggende pagina terechtkomen.
@@ -118,9 +160,9 @@ function onVisibilityChange(): void {
 onMounted(() => {
   // Eén plek die de auth initialiseert (A2.2): de composable blijft testbaar.
   void init();
-  // Deep link + webvariant van de uitnodiging (AGENTS.md §8.11). De
-  // `appUrlOpen`-listener wordt door `useDeepLink()` zelf in `onBeforeUnmount`
-  // opgeruimd.
+  // Deep link + webvariant van bevestiging en herstel (AGENTS.md §8.11).
+  // `useDeepLink()` registreert de opruiming van de `appUrlOpen`-listener.
+  useDeepLink();
   initDeepLink();
   document.addEventListener("visibilitychange", onVisibilityChange);
   startMinSplashTimer();
@@ -128,6 +170,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", onVisibilityChange);
   if (pullTimer) clearTimeout(pullTimer);
+  if (verifiedTimer) {
+    clearTimeout(verifiedTimer);
+    verifiedTimer = null;
+  }
   stopHydrating();
   if (minSplashTimer) {
     clearTimeout(minSplashTimer);
@@ -138,19 +184,30 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-shell">
-    <!-- View-keuze zonder router (A4.2): de volgorde is Splash → ingelogd →
-         registratie → wachtwoord herstellen → inloggen. Het laadscherm dekt
-         zowel `!initialized` als de eerste hydrate (C3, max. 3 s), plus een
+    <!-- Groene bevestiging na e-mailverificatie (AGENTS.md §7.6). -->
+    <p v-if="justVerified && !showSplash" class="banner-success" role="status">
+      Je account is bevestigd.
+    </p>
+
+    <!-- View-keuze zonder router (A4.2): de volgorde is Splash → herstel →
+         ingelogd → verificatie → registratie → inloggen. Herstel gaat vóór
+         `user`, anders zou de recovery-sessie meteen het overzicht tonen en kon
+         het nieuwe wachtwoord nooit gezet worden. Het laadscherm dekt zowel
+         `!initialized` als de eerste hydrate (C3, max. 3 s), plus een
          minimumtoonduur van 400 ms op elke koude start. -->
     <SplashView v-if="showSplash" />
+    <ResetPasswordView v-else-if="recovery" @cancel="recovery = false" />
     <template v-else-if="user">
       <!-- Beide views blijven gemonteerd; de .active-klasse bepaalt welke
            zichtbaar is (idem legacy: .view { display:none } / .view.active). -->
       <HomeView :class="{ active: !activeListId }" />
       <ListDetailView :class="{ active: !!activeListId }" />
     </template>
-    <ResetPasswordView v-else-if="recovery" @cancel="recovery = false" />
-    <RegisterView v-else-if="inviteToken" @cancel="inviteToken = null" />
-    <LoginView v-else :key="sessionKey" />
+    <VerifyEmailView
+      v-else-if="verificationEmail"
+      @back="verificationEmail = null"
+    />
+    <RegisterView v-else-if="registerOpen" @cancel="registerOpen = false" />
+    <LoginView v-else :key="sessionKey" @register="registerOpen = true" />
   </div>
 </template>

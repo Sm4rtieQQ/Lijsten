@@ -1,72 +1,34 @@
-import { onBeforeUnmount, ref, type Ref } from "vue";
+import { onBeforeUnmount } from "vue";
 
 import {
-  extractInviteToken,
   isRecoveryUrl,
+  isSignupConfirmationUrl,
   readParams,
-  scrubInviteToken,
-} from "../lib/inviteToken";
+  stripUrlHash,
+} from "../lib/urlParams";
 import { supabase } from "../lib/supabase";
-import { setRecovery } from "./useAuth";
+import { setJustVerified, setRecovery } from "./useAuth";
 
 /**
- * Deep link + web-variant van de registratie-uitnodiging en de herstel-link
+ * Deep link + webvariant van de e-mailbevestiging en de herstel-link
  * (AGENTS.md §8.11).
  *
- * Er is geen webhost: de app draait als Android-app. Een uitnodiging komt binnen
- * als `com.lijstjes.app://invite?token=…` en wordt door Android als intent
- * afgegeven. Voor webontwikkeling blijven `?invite=` en `#invite=` bestaan, zodat
- * registratie in `npm run dev` te testen is.
+ * Er is geen webhost: de app draait als Android-app. De bevestigings- en
+ * herstellink komen binnen via het eigen scheme `com.lijstjes.app://` en worden
+ * door Android als intent afgegeven. Omdat Supabase standaard de `implicit`-flow
+ * gebruikt, zit het tokenpaar in de hash (`#access_token=…&refresh_token=…`) en
+ * het soort link in `type` (`signup` of `recovery`).
  *
- * Het pure URL-lezen staat in `lib/inviteToken.ts`; hier staat alleen de
- * afhandeling. De uitnodigingstoken wordt nooit in `localStorage` bewaard en
- * nooit gelogd. Bij een deep link komt hij bovendien niet in de URL van de
- * WebView terecht: hij wordt uit het intent gelezen en daarna weggegooid.
+ * Het pure URL-lezen staat in `lib/urlParams.ts`; hier staat alleen de
+ * afhandeling. De tokens worden nooit in `localStorage` bewaard en nooit gelogd.
  */
-
-/** Pad waarmee Supabase de herstel-link terugstuurt. */
-const RECOVERY_PATH = "auth/callback";
-
-const inviteToken: Ref<string | null> = ref(null);
 
 const pendingHandles: Array<{ remove: () => Promise<void> }> = [];
 
 /** Alleen voor tests: reset de module-state. */
 export function __resetDeepLinkState(): void {
-  inviteToken.value = null;
   setRecovery(false);
-}
-
-/**
- * Verwerk een binnengekomen URL.
- *
- * Bij een herstel-link zitten de tokens in de hash. Die halen we zelf op en
- * zetten we er een sessie mee: `setSession` is de enige publieke API hiervoor en
- * vuurt daarna `SIGNED_IN`, niet `PASSWORD_RECOVERY`. Daarom zetten we de
- * herstel-vlag zelf op `true` in plaats van op het event te wachten.
- */
-export async function handleIncomingUrl(url: string): Promise<void> {
-  if (isRecoveryUrl(url)) {
-    // Zelfde parser als voor de uitnodiging: één plek die URLs leest.
-    const params = readParams(url);
-    const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
-
-    if (!accessToken || !refreshToken) return;
-    if (!supabase) return;
-
-    const { error } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
-    if (error) return;
-
-    setRecovery(true);
-    return;
-  }
-
-  const token = extractInviteToken(url);
-  if (token) inviteToken.value = token;
+  setJustVerified(false);
 }
 
 /** Ligt de app binnen Capacitor (dus niet in een gewone browser)? */
@@ -75,6 +37,40 @@ function isNativePlatform(): boolean {
     globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }
   ).Capacitor;
   return cap?.isNativePlatform?.() === true;
+}
+
+/**
+ * Verwerk een binnengekomen URL.
+ *
+ * De tokens zitten in de hash. Die halen we zelf op en zetten we er een sessie
+ * mee: `setSession` is de enige publieke API hiervoor en vuurt daarna
+ * `SIGNED_IN`, niet `PASSWORD_RECOVERY`. Daarom zetten we de juiste vlag zelf op
+ * `true` in plaats van op het event te wachten.
+ *
+ * Bij een bevestigingslink (`type=signup`) weten we dat dit géén herstel-link
+ * is: zonder dat onderscheid zou een bevestigingslink ten onrechte naar
+ * `ResetPasswordView` leiden.
+ */
+export async function handleIncomingUrl(url: string): Promise<void> {
+  const recoveryUrl = isRecoveryUrl(url);
+  const signupUrl = isSignupConfirmationUrl(url);
+  if (!recoveryUrl && !signupUrl) return;
+
+  const params = readParams(url);
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+
+  if (!accessToken || !refreshToken) return;
+  if (!supabase) return;
+
+  const { error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error) return;
+
+  if (recoveryUrl) setRecovery(true);
+  else setJustVerified(true);
 }
 
 async function onLaunchUrl(): Promise<void> {
@@ -105,7 +101,7 @@ async function registerListener(): Promise<void> {
  * Aanroepen vanuit `App.vue`, niet vanuit deze composable (zie AGENTS.md §5).
  */
 export function initDeepLink(): void {
-  // Webvariant (`?invite=` / `#invite=`): altijd eerst de huidige URL nakijken.
+  // Webvariant en cold start: kijk altijd eerst naar de huidige URL.
   readCurrentLocation();
 
   if (!isNativePlatform()) return;
@@ -114,25 +110,22 @@ export function initDeepLink(): void {
 }
 
 /**
- * Lees de uitnodiging uit de huidige URL van de WebView en haal die er daarna
- * weer uit. De token mag niet in de URL-balk, de historie of een screenshot
- * achterblijven.
+ * Lees een bevestigings-/herstel-link uit de huidige URL van de WebView en haal
+ * de tokens er meteen uit. Ze mogen niet in de URL-balk, de historie of een
+ * screenshot achterblijven.
  */
 function readCurrentLocation(): void {
   if (typeof window === "undefined") return;
   const current = window.location.href;
-  if (current.includes(RECOVERY_PATH)) return; // laat Supabase dit zelf afhandelen
-
-  const token = extractInviteToken(current);
-  if (!token) return;
-
-  inviteToken.value = token;
+  if (!isRecoveryUrl(current) && !isSignupConfirmationUrl(current)) return;
 
   try {
-    window.history.replaceState({}, "", scrubInviteToken(current));
+    window.history.replaceState({}, "", stripUrlHash(current));
   } catch {
     // Sommige omgevingen blokkeren replaceState; de app blijft werken.
   }
+
+  void handleIncomingUrl(current);
 }
 
 /** Verwijder de `appUrlOpen`-listener. Aanroepen vanuit `App.vue`. */
@@ -147,7 +140,6 @@ export function useDeepLink() {
   onBeforeUnmount(disposeDeepLink);
 
   return {
-    inviteToken,
     /** Handmatig een URL verwerken (webvariant en tests). */
     handleIncomingUrl,
   };

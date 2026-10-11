@@ -3,6 +3,8 @@ import { reactive, ref } from "vue";
 
 import { useAuth } from "../composables/useAuth";
 
+const emit = defineEmits<{ register: [] }>();
+
 const { error, configured, signIn, resetPassword } = useAuth();
 
 const form = reactive({
@@ -96,6 +98,14 @@ async function onForgot() {
         @click="onForgot"
       >
         Wachtwoord vergeten?
+      </button>
+
+      <button
+        class="button-secondary login-register"
+        type="button"
+        @click="emit('register')"
+      >
+        Registreren
       </button>
     </div>
   </section>

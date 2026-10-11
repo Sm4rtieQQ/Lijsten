@@ -4,7 +4,7 @@
 
 ## 1. Doel & werkwijze
 
-- Lees altijd eerst `tasks.md` en het actieve planbestand (`task_02.md`) voordat je begint met implementeren.
+- Lees altijd eerst `tasks.md` en het actieve planbestand (`tasks_03.md`) voordat je begint met implementeren.
 - Werk **web-first**: bouw en test eerst in de browser (`npm run dev`). De Android-export gebeurt **alleen** nadat de gebruiker expliciet heeft aangegeven dat de webversie goed is.
 - Houd veranderingen klein en testbaar. Eén taak per keer, en zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond en getest.
 - Nieuwe of gewijzigde **logica hoort getest te worden met vitest** (`npm run test`), naast handmatig testen in de browser.
@@ -17,7 +17,7 @@
 | Frontend        | Vue 3.5+, TypeScript (strict), Composition API (`<script setup lang="ts">`)               |
 | Build tool      | [Vite](https://vitejs.dev/)                                                               |
 | Backend/Auth/DB | [Supabase](https://supabase.com/) (Auth + Postgres + Row Level Security)                  |
-| Auth            | **Uitnodigingsregistratie** — accounts alleen via een persoonlijke uitnodiging (§7.6)     |
+| Auth            | **Open registratie met e-mailverificatie** — bevestiging verplicht vóór toegang (§7.6)    |
 | Mobile          | [Capacitor](https://capacitorjs.com/) Android                                             |
 | Stijl           | Gewone CSS (behoud bestaande `styles.css`-stijl en kleurpalet)                            |
 | Code kwaliteit  | [Prettier](https://prettier.io/) (moet altijd toegepast worden voor gewijzigde bestanden) |
@@ -42,7 +42,7 @@
 
 > **Let op:** `npm run test` en `npm run test:watch` bestaan sinds fase G (vitest + `@vue/test-utils` + `jsdom`, zie `task_02.md`). Spec-bestanden (`*.spec.ts`) staan naast de code en worden door `vue-tsc -b` strikt meegetypecheckt. Zie ook §5: `onMounted` hoort in de component, zodat composables testbaar blijven.
 
-> **Let op bij Android-APK's:** er is geen `npm run android:debug`. Voor een **debug**-APK (snel testen/sideload, ondertekend met het systeem debug keystore) gebruik je `./gradlew assembleDebug` vanuit `android/`, of `npx cap run android` voor directe installatie op een device. `npm run android:build` bouwt een _release_-APK en is zonder geldige `signingConfig` ongetekend. Zie §10.2.
+> **Let op bij Android-APK's:** er is geen `npm run android:debug`. Voor een **debug**-APK (snel testen/sideload, ondertekend met het systeem debug keystore) gebruik je `./gradlew assembleDebug` vanuit `android/`, of `npx cap run android` voor directe installatie op een device. `npm run android:build` bouwt een _release_-APK; die is ondertekend zolang `android/keystore.properties` bestaat (anders ongetekend en niet installeerbaar). Zie §10.2.
 
 ## 4. Projectstructuur
 
@@ -55,8 +55,9 @@ Lijsten/
 ├── .gitignore
 ├── .prettierrc.json
 ├── AGENTS.md               # Deze file
-├── tasks.md                # Voortgang fase 1 t/m 4
-├── task_02.md              # Actief plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
+├── tasks.md                # Voortgang per fase (verwijst naar het actieve plan)
+├── task_02.md              # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
+├── tasks_03.md             # Actief plan: open registratie + e-mailverificatie
 ├── index.html              # Vite entry (incl. Google Fonts-link)
 ├── package.json
 ├── capacitor.config.json   # webDir: dist
@@ -65,18 +66,19 @@ Lijsten/
 ├── tsconfig.app.json
 ├── tsconfig.node.json
 ├── supabase-schema.sql     # Schema + RLS voor lists/list_items (idem uitvoerbaar)
-├── supabase-invites.sql    # Sjabloon voor uitnodigingsregistratie (tabel + trigger + beheer)
+├── supabase-verification.sql  # Sjabloon voor e-mailverificatie (invite eruit + RLS-grendel + beheer)
 ├── scripts/
 │   └── verify-data-layer.ts  # Geautomatiseerde fase 2 checks (npm run verify:data)
 ├── src/
-│   ├── App.vue             # View-switching: splash / login / registratie / overzicht / detail
+│   ├── App.vue             # View-switching: splash / login / registratie / verificatie / overzicht / detail
 │   ├── main.ts
 │   ├── styles.css          # Geïmporteerd in main.ts — alle styling
 │   ├── env.d.ts            # TypeScript env types
 │   ├── components/
 │   │   ├── SplashView.vue        # Laadscherm (staat bij het opstarten)
-│   │   ├── LoginView.vue         # Alleen inloggen (geen registratie)
-│   │   ├── RegisterView.vue      # Registratie via uitnodiging
+│   │   ├── LoginView.vue         # Inloggen + knop Registreren
+│   │   ├── RegisterView.vue      # Open registratie (zonder token)
+│   │   ├── VerifyEmailView.vue   # Wacht op e-mailverificatie + nieuwe link opvragen
 │   │   ├── ResetPasswordView.vue # Nieuw wachtwoord na herstel-link
 │   │   ├── HomeView.vue          # Lijstoverzicht + accountmenu
 │   │   ├── ListDetailView.vue    # Lijstweergave, items, verwijderen
@@ -88,12 +90,12 @@ Lijsten/
 │   │   ├── useLists.ts
 │   │   ├── useSync.ts
 │   │   ├── useArmedConfirm.ts    # Twee-staps bevestiging (§8.6)
-│   │   ├── useDeepLink.ts        # Deep link + ?invite= (§8.11)
+│   │   ├── useDeepLink.ts        # Deep link: bevestiging + herstel (§8.11)
 │   │   └── *.spec.ts
 │   └── lib/
 │       ├── supabase.ts
-│       ├── database.types.ts   # Centrale Supabase Database types (incl. claim_invite)
-│       ├── inviteToken.ts      # Pure URL-parser voor de uitnodiging (§8.11)
+│       ├── database.types.ts   # Centrale Supabase Database types (lists, list_items)
+│       ├── urlParams.ts        # Pure URL-parser voor deep links (§8.11)
 │       ├── storage.ts          # Per-user storage + outbox
 │       ├── sync.ts             # Offline-first sync logica
 │       ├── errorMessages.ts    # Fout -> leesbare NL-tekst (§7.5)
@@ -131,7 +133,7 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 - `src/env.d.ts` type `import.meta.env` (Vite types).
 - `src/lib/supabase.ts` leest uit `import.meta.env.VITE_SUPABASE_URL` en `VITE_SUPABASE_ANON_KEY`.
 - **Regel:** geen CDN `<script src="...supabase-js...">` in `index.html`. Importeer Supabase via `@supabase/supabase-js` (npm dependency). Zo werkt de build offline correct in de Android WebView.
-- **Uitnodigingen hebben geen env-var nodig**: het token komt uit de link die de beheerder zelf uitdeelt, en de server-side controle gebeurt in Postgres (§7.6).
+- **E-mailverificatie heeft geen env-var nodig**: Supabase verstuurt de bevestigingsmail en de server-side grendel (`is_email_confirmed()`) zit in Postgres (§7.6).
 
 ## 7. Data, security & offline-first
 
@@ -146,8 +148,8 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 
 ### 7.2 Database types
 
-- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties; daarnaast de beheertabellen `invites` en `invite_claims` en het retourtype van de functie `claim_invite`). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
-- De beheertabellen `invites` en `invite_claims` staan **in het type** omdat de RPC `claim_invite` ze raakt. De app krijgt daarover **geen** rechten (RLS aan, geen policies, grants ingetrokken); het zijn types, geen toegang.
+- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
+- Het uitnodigingssysteem (`invites`, `invite_claims`, `claim_invite`) is **verwijderd**; die types bestaan niet meer.
 - Domeinmodellen (`List`, `ListItem`) in `src/types/app.ts` — gescheiden van DB-shape waar zinvol.
 
 ### 7.3 Outbox (operation queue)
@@ -177,25 +179,20 @@ De **sync-interface** (`SyncIndicator.vue`) staat **rechtsboven** en is bewust *
 - `flushOutbox` mag **nooit rejecten**: gewone fouten worden omgezet naar `{ ok: false, error: <NL-tekst> }`, en `lastError` is altijd een **string**.
 - `runFlush` in `useSync.ts` staat in `try/catch/finally`, zodat `flushing` altijd vrijkomt, de status nooit blijft hangen op `syncing`, en de retry/backoff blijft werken.
 - Details mogen naar `console.warn` **achter `import.meta.env.DEV`**, nooit naar de UI en nooit als `console.log` in productiecode.
-- Hetzelfde principe geldt voor auth: de triggerfout `no_active_invite` wordt vertaald naar `Deze uitnodiging is ongeldig of verlopen.`
+- Hetzelfde principe geldt voor auth: de fout "email not confirmed" wordt vertaald naar `Je e-mailadres is nog niet bevestigd. Vraag een nieuwe verificatielink aan of klik op de link in je mail.`, en een rate limit naar een vriendelijke NL-tekst zonder technische termen.
 
-### 7.6 Registratie op uitnodiging (verplicht)
+### 7.6 Open registratie met e-mailverificatie
 
-Er is **géén open registratie**. Alleen uitgenodigde personen kunnen een account aanmaken.
+Er is **open registratie**, maar een account is pas bruikbaar **nadat het e-mailadres is bevestigd**. De bevestiging is verplicht en wordt in de **database** afgedwongen.
 
-- **Model:** één uitnodiging = één account. Een uitnodiging is **eenmalig** (`used_at`) en verloopt na **7 dagen** (`expires_at`, per uitnodiging instelbaar).
-- **Afdwinging gebeurt in de database**, niet in de app: een `before insert on auth.users` trigger in `supabase-invites.sql` weigert elke signup zonder geldige uitnodiging (fout `no_active_invite`). Een token checken in de client is géén beveiliging.
-- **De claim-stap is onderdeel van de beveiliging.** De registratiepagina roept `claim_invite(token)` aan voordat ze `signUp` doet. De claim is 15 minuten geldig. Zonder die stap zou iemand zonder token een account kunnen aanmaken op een geadresseerd e-mailadres en zo de uitnodiging verbranden.
-- **Beheer:** uitnodigingen worden uitsluitend handmatig gemaakt via de Supabase SQL Editor (`supabase-invites.sql`, blok 6) of het Dashboard. `anon`/`authenticated` hebben **geen** rechten op `invites` en `invite_claims` (RLS aan, geen policies, grants ingetrokken).
-- **E-mailbevestiging staat UIT** in Supabase (variant A). Na signup is de gebruiker direct ingelogd; er is dus geen "verstuur opnieuw"-knop.
-- **Wachtwoordbeleid:** minimaal **6 tekens** (zoals nu). De pagina valideert met dezelfde regels als Supabase, zodat een afgewezen wachtwoord geen verspilde uitnodiging oplevert.
-- **Client-regels:**
-  - `supabase.auth.signUp` bestaat alleen in `useAuth.acceptInvite(...)`. Er is **geen** publieke `signUp` meer in de auth-laag.
-  - `acceptInvite` roept eerst `claim_invite` aan en daarna pas `signUp`.
-  - Het e-mailadres komt uit de uitnodiging en is op de pagina **readonly**; een ander adres wordt geweigerd met `Deze uitnodiging is voor een ander e-mailadres.`
-  - De token komt binnen via een **deep link**: `com.lijstjes.app://invite?token=…` (zie §8.11). Voor webtesten bestaan daarnaast `?invite=` en `#invite=`. Daarna wordt de token meteen weggegooid respectievelijk uit de URL verwijderd (`history.replaceState`). Niet loggen, niet in `localStorage` bewaren, niet in foutmeldingen tonen.
-- **Supabase-instellingen** (nodig voor het functioneren): Email-provider aan, "Allow new users to sign up" **aan** (de trigger is de poortwachter), "Confirm email" **uit**. Site URL en Redirect URLs staan op **`com.lijstjes.app://`** — het app-schema, **geen** webadres: de app draait als Android-app zonder webhost. De volledige checklist staat onderaan `supabase-invites.sql`.
-- **Gevolg voor de beheerder:** een uitnodigingslink is het enige toegangsbewijs. Mail hem uitsluitend naar het echte adres van die persoon, niet in een groepsbericht. Stuur hem als **platte tekst**: WhatsApp en Mail zetten URL's om naar een klikbare kaart. Lukt een registratie toch niet, dan maak je simpelweg een nieuwe uitnodiging.
+- **Aanmelden:** `RegisterView.vue` stuurt `supabase.auth.signUp({ email, password, options: { emailRedirectTo } })`. De gebruiker kiest zelf een e-mailadres en wachtwoord (minimaal **6 tekens**); er is geen token of uitnodiging meer.
+- **Bevestigingsmail:** Supabase verstuurt de "Confirm signup"-mail met `{{ .ConfirmationURL }}`. Na signup is er **geen sessie**: de app toont `VerifyEmailView.vue` met `Er is een email verzonden naar <email>. Klik op de link in de mail om uw account te accepteren.` en een link om een **nieuwe** verificatielink op te vragen (`resendVerification`).
+- **Afdwinging gebeurt in de database**, niet in de app: de Supabase-instelling **"Confirm email" staat AAN** (inloggen zonder bevestiging wordt server-side geweigerd) én de RLS-policies van `lists`/`list_items` eisen `public.is_email_confirmed()` (in `supabase-verification.sql`). Een sessie zonder bevestiging kan dus niets lezen of schrijven.
+- **Bevestigingslink:** `emailRedirectTo` is native `com.lijstjes.app://` en op het web `window.location.origin` (zodat dit in `npm run dev` te testen is). De link logt de gebruiker **automatisch in**; de app toont daarna een kleine **groene bevestiging**.
+- **Verificatietokens** (in de URL-hash) worden niet gelogd, niet in `localStorage` bewaard en niet in de UI of in foutmeldingen getoond; ze worden meteen uit de URL gehaald (`history.replaceState`).
+- **Het uitnodigingssysteem is volledig verwijderd:** geen `invites`/`invite_claims`, geen `claim_invite`, geen `enforce_invite_on_signup`-trigger en geen `com.lijstjes.app://invite` deep link. De oude `supabase-invites.sql` is vervangen door `supabase-verification.sql`.
+- **Geen eigen SMTP-provider.** Bewust besluit: de bevestigings- en herstelmail gaan via de standaardaflevering van Supabase, met een harde limiet van enkele mails per uur en een kans op spam. De mail kan dus uitblijven. De UI meldt dit zonder technische termen als "rate limit" of "SMTP"; de resend-knop heeft een **cooldown van 60 seconden**.
+- **Supabase-instellingen** (nodig voor het functioneren): Email-provider aan, "Allow new users to sign up" **aan**, "Confirm email" **aan**. Site URL en Redirect URLs staan op **`com.lijstjes.app://`** — het app-schema, **geen** webadres: de app draait als Android-app zonder webhost. Voor webtesten staat `http://localhost:5173` er ook bij. De volledige checklist staat in `supabase-verification.sql`.
 
 ## 8. Functiespecificaties
 
@@ -282,9 +279,9 @@ Het accountmenu (`HomeView.vue`) heeft deze **volgorde**, exact:
 
 ### 8.9 Inlogpagina
 
-- De inlogpagina (`LoginView.vue`) heeft **alleen** het inlogformulier: e-mail, wachtwoord, `Inloggen` en `Wachtwoord vergoten?`.
-- **Geen registratieknop.** Registratie verloopt uitsluitend via de uitnodigingslink (§7.6).
-- **Geen tekst** over bevestiging via e-mail en **geen uitnodigingshint**: de regel is verwijderd en komt niet in een andere vorm terug. Wie een account nodig heeft, krijgt de link rechtstreeks van de beheerder.
+- De inlogpagina (`LoginView.vue`) heeft het inlogformulier: e-mail, wachtwoord, `Inloggen` en `Wachtwoord vergeten?`.
+- Daarnaast een **`Registreren`-knop** die naar de registratiepagina gaat (`RegisterView.vue`).
+- Na een geslaagde **e-mailbevestiging** toont de app een kleine **groene** bevestiging (`App.vue`, globaal, `role="status"`), bijv. `Je account is bevestigd.`; die verdwijnt na ~5 s vanzelf. De banner verschijnt ook op de inlogpagina wanneer er geen sessie is (fallback).
 
 ### 8.10 Overzichtspagina — titel
 
@@ -293,18 +290,19 @@ Het accountmenu (`HomeView.vue`) heeft deze **volgorde**, exact:
 
 ### 8.11 Deep link en wachtwoord herstellen
 
-De app draait als **Android-app zonder webhost**. Er is dus geen webadres; de registratie-uitnodiging komt binnen via een deep link met eigen scheme.
+De app draait als **Android-app zonder webhost**. Er is dus geen webadres; de **e-mailbevestiging** en het **wachtwoordherstel** komen binnen via een deep link met eigen scheme.
 
 - **Scheme:** `com.lijstjes.app`, vastgelegd in `android/app/src/main/res/values/strings.xml` als `custom_url_scheme`. Wijzig dit niet zonder de `AndroidManifest.xml` en de Supabase Site URL mee te wijzigen.
 - **Intent-filter:** in `AndroidManifest.xml` een **tweede** `<intent-filter>` in de `<activity>`, met `VIEW` / `DEFAULT` / `BROWSABLE` en `<data android:scheme="@string/custom_url_scheme" />`. **Zonder `android:autoVerify="true"`** — dat geldt alleen voor App Links op een gedomein dat je bezit, en het zou de custom scheme laten falen.
 - **Ontvangen:** bij het opstarten `App.getLaunchUrl()` én tijdens het draaien `App.addListener("appUrlOpen", …)`. Beide zijn nodig: de eerste voor een cold start, de tweede als de app al open staat. Ruim de listener op in `onBeforeUnmount`.
-- **Registratielink:** `com.lijstjes.app://invite?token=…`. Dit is geen Supabase-redirect; de beheerder plakt de link in een mail en de database-trigger valideert de token.
-- **Webvarianten:** `?invite=<token>` en `#invite=<token>` blijven bestaan zodat registratie in `npm run dev` te testen is. De deep link werkt niet in een browser.
-- **Gevolg:** de link werkt alleen waar de app geïnstalleerd is. Op een computer doet het scheme niets.
+- **Bevestigingslink:** de "Confirm signup"-mail linkt naar `emailRedirectTo` = `com.lijstjes.app://` (native) of `window.location.origin` (web). Omdat `flowType` `implicit` is, zit het tokenpaar in de **hash** met `type=signup`. `useDeepLink` leest die hash, roept `setSession({ access_token, refresh_token })` aan en zet `setJustVerified(true)` — de gebruiker is daarna ingelogd en ziet de groene bevestiging.
+- **Webvariant:** op het web gebeurt dezelfde redirect naar de gebruikte origin (`http://localhost:5173`), zodat registratie in `npm run dev` te testen is. De deep link `com.lijstjes.app://` werkt niet in een browser.
+- **Gevolg:** de deep link werkt alleen waar de app geïnstalleerd is. Op een computer doet het scheme niets.
 - **Wachtwoord herstellen:** `resetPasswordForEmail(email, { redirectTo: "com.lijstjes.app://" })`. De recovery-sessie komt binnen als intent.
   - **Let op:** `supabase.auth.getSessionFromUrl()` bestaat **niet** als publieke API in de huidige `@supabase/auth-js` (`_getSessionFromURL` is `private`). Omdat `flowType` standaard `implicit` is, zit het tokenpaar in de **hash** van de herstellink. `useDeepLink.handleIncomingUrl` leest die hash zelf en roept de wel publieke `supabase.auth.setSession({ access_token, refresh_token })` aan. Verzin geen cast om de private methode toch aan te roepen.
-  - `setSession` vuurt daarna `SIGNED_IN`, **niet** `PASSWORD_RECOVERY`. Daarom zet `useDeepLink` de vlag met `setRecovery(true)` uit `useAuth`, in plaats van op het event te wachten. De `PASSWORD_RECOVERY`-listener blijft als tweede route bestaan voor het geval Supabase de flow zelf afhandelt.
-- **Geen SMTP-provider.** Bewust besluit: de herstelmail gaat via de standaardaflevering van Supabase, met een harde limiet van enkele mails per uur en een hoge kans op spam. De mail kan dus uitblijven. Het vangnet is dat de beheerder een nieuw wachtwoord zet. De UI meldt dit zonder technische termen als "rate limit" of "SMTP".
+  - `setSession` vuurt daarna `SIGNED_IN`, **niet** `PASSWORD_RECOVERY`. Daarom zet `useDeepLink` de vlag met `setRecovery(true)` uit `useAuth`, in plaats van op het event te wachten. `src/lib/supabase.ts` staat op `detectSessionInUrl: false`, zodat `useDeepLink` de enige plek is die de URL-hash leest en verwerkt.
+  - **Onderscheid recovery vs. bevestiging:** `isRecoveryUrl(url)` → `type=recovery`, `isSignupConfirmationUrl(url)` → `type=signup` (+ tokenpaar). Zonder dat onderscheid zou een bevestigingslink ten onrechte naar `ResetPasswordView` leiden.
+- **Geen SMTP-provider.** Bewust besluit: de herstel- en verificatiemail gaan via de standaardaflevering van Supabase, met een harde limiet van enkele mails per uur en een hoge kans op spam. De mail kan dus uitblijven. De UI meldt dit zonder technische termen als "rate limit" of "SMTP" en houdt voor het opnieuw aanvragen een cooldown aan.
 
 ## 9. Stijl, conventies & kwaliteit
 
@@ -352,20 +350,36 @@ De Android `.apk` export gebeurt **alleen nadat de gebruiker expliciet zegt dat 
 3. **Capacitor sync**
    - `npm run android:sync` (of `npx cap sync android`) — kopieert `dist/` naar Android
 
-4. **Keuze signing (dialog met gebruiker)**
-   Er is **geen** keystore in het project; de bestaande APK was een **debug-APK** (Android Debug cert). Bij export stel je de gebruiker deze keuze voor:
-   - **A) Debug-APK (snel, testen)** — `./gradlew assembleDebug` vanuit `android/`, ondertekend met het systeem debug keystore (`~/.android/debug.keystore`). Kan een bestaande debug-geïnstalleerde app overschrijven (zelfde cert).
-   - **B) Release-APK (distributie)** — vereist een **eigen keystore**. **Waarschuwing:** als je de keystore kwijt raakt, kun je de app **nooit meer bijwerken** in de Play Store. Vraag de gebruiker om keystore-path, alias en wachtwoorden (niet committen).
+4. **Signing (release-keystore is aanwezig)**
+   Er is een **eigen release-keystore** voor dit project:
+   - Keystore: `Documenten/Projecten/code_26/.keys/lijstjes-release.jks` (**buiten** de repo),
+     alias `lijstjes`, type `PKCS12`, RSA 2048, geldig 10.000 dagen.
+   - Wiring: `android/keystore.properties` (staat in `.gitignore`) met `storeFile`,
+     `storePassword`, `keyAlias`, `keyPassword`, `storeType`. `android/app/build.gradle` leest
+     dit bestand en zet `signingConfigs.release` + `buildTypes.release.signingConfig`.
+   - **Back-up:** bewaar de map `.keys/` (keystore **en** `keystore.properties`) op minimaal
+     twee plekken (wachtwoordmanager + externe schijf/cloud). **Kwijt = nooit meer bijwerken
+     onder dezelfde identiteit.**
+   - **Nooit committen.** `.gitignore` blokkeert `*.jks`/`*.keystore`; `keystore.properties`
+     staat er expliciet in.
+   - Voor een **nieuwe** keystore elders geldt nog steeds: genereer **niet** automatisch,
+     vraag de gebruiker actief en geef de waarschuwing over het kwijtraken.
+   - **Play Store later:** gebruik dezelfde keystore als **upload key** + Play App Signing; de
+     `applicationId` (`com.lijstjes.app`) ligt dan voorgoed vast.
 
-   > **Belangrijk:** genereer **geen** keystore automatisch. Vraag de gebruiker actief welke optie en geef bovenstaande waarschuwing.
-
-5. **Bouwen APK**
-   - Debug: `./gradlew assembleDebug` (of `npx cap run android` voor directe installatie op een device).
-   - `npm run android:build` (`--androidreleasetype APK`) bouwt een **release**-APK en is zonder geldige `signingConfig` in `android/app/build.gradle` **ongetekend**. Gebruik die dus niet als "debug"-snelknop.
-   - Release: alleen met geldige `signingConfig` (nooit plaintext secrets in de repo).
+5. **Bouwen APK/AAB** (vanuit `android/`, met `JAVA_HOME=/opt/android-studio-for-platform/jbr`)
+   - **Release-APK (delen/distributie):** `./gradlew assembleRelease` →
+     `android/app/build/outputs/apk/release/app-release.apk` (ondertekend met de release-keystore).
+   - **Release-AAB (Play Store):** `./gradlew bundleRelease` →
+     `android/app/build/outputs/bundle/release/app-release.aab`.
+   - **Debug-APK (snel testen/sideload):** `./gradlew assembleDebug` (systeem debug keystore) of
+     `npx cap run android`.
+   - Ontbreekt `android/keystore.properties`, dan is er geen `signingConfig` en levert
+     `assembleRelease` een **ongetekende** (niet-installeerbare) APK op. `npm run android:build`
+     is de Capacitor-wrapper rond de release-build; bij voorkeur gebruik je de Gradle-commando's.
 
 6. **Versienummer**
-   - `versionName` en `versionCode` staan in `android/app/build.gradle`; **houd `package.json`'s `version` gelijk** aan de Android-versie (bv. `versionName "1.2"` + `versionCode 2` ↔ `package.json` `1.2.0`).
+   - `versionName` en `versionCode` staan in `android/app/build.gradle`; **houd `package.json`'s `version` gelijk** aan de Android-versie (bv. `versionName "1.3"` + `versionCode 3` ↔ `package.json` `1.3.0`).
    - Verhoog het versienummer vlak vóór het bouwen, niet eerder.
 
 7. **Verifieren & artefact**
@@ -384,7 +398,7 @@ Deze fouten zijn in de legacy-code gevonden en inmiddels opgelost. De les is bli
 | Supabase via CDN `<script>` in `index.html`                  | Importeer via npm zodat de Vite-bundle offline werkt in de Android WebView.                                                     |
 | Dubbele globale click-handlers (`document.addEventListener`) | Vue events per component; één listener per zorg, en ruim hem op in `onBeforeUnmount`.                                           |
 | `window.confirm` als bevestiging                             | Eigen component met toegankelijkheid, of (bij items) de twee-staps knop van §8.6.                                               |
-| Registratie open voor iedereen                               | Accounts alleen via uitnodiging, afgedwongen in de database (§7.6).                                                             |
+| Registratie zonder e-mailverificatie                         | Bevestiging verplicht, afgedwongen in de database (§7.6).                                                                       |
 | Ruwe technische fout (`TypeError`) in de UI                  | Fout afhandelen én mappen naar leesbare NL-tekst (§7.5).                                                                        |
 
 ## 12. Definition of Done (per taak)
@@ -402,7 +416,7 @@ Een taak is pas afgerond als:
 - [ ] Toegankelijkheid nagekeken waar relevant (focus, aria, ESC, `focus-visible`)
 - [ ] Cross-user isolatie getest (inloggen als user A, uitloggen, inloggen als user B → geen data van A zichtbaar)
 - [ ] Sync-behavior correct (outbox FIFO, retry/backoff, indicator toont juiste status)
-- [ ] Bij auth-/registratiewijzigingen: negatieve test gedaan (zonder token, met verlopen token, met verkeerd e-mailadres)
+- [ ] Bij auth-/registratiewijzigingen: negatieve test gedaan (onbevestigd e-mailadres kan niet inloggen; resend met cooldown)
 - [ ] Taakregel in `tasks.md` of het planbestand is **[x]** gezet (na succesvolle afronding)
 - [ ] Code consistent met bestaande stijl en architectuur
 
@@ -413,11 +427,13 @@ Een taak is pas afgerond als:
 - **NIET** CDN scripts toevoegen (Supabase via npm).
 - **NIET** voorbeeldlijsten toevoegen voor ingelogde gebruikers.
 - **NIET** destructieve bulk-sync implementeren.
-- **NIET** open registratie: geen publieke `signUp` in de auth-laag, en geen client-side-only uitnodigingscontrole.
-- **NIET** uitnodigingstokens in de URL laten staan, loggen of in `localStorage` bewaren.
-- **NIET** een webhost opzetten om de uitnodigingslink werkend te krijgen; dat is precies wat de deep link (`com.lijstjes.app://`) overbodig maakt (§8.11).
+- **NIET** verificatie omzeilen: geen sessie of route die toegang geeft zonder bevestigd e-mailadres; "Confirm email" + RLS (`is_email_confirmed()`) zijn de grendel.
+- **NIET** "Confirm email" uitzetten; dan is de eis "geen gebruik zonder verificatie" niet meer afdwingbaar.
+- **NIET** verificatie-/recoverytokens in de URL laten staan, loggen of in `localStorage` bewaren.
+- **NIET** een webhost opzetten voor de bevestigingslink; de deep link (`com.lijstjes.app://`) is daarvoor de route (§8.11).
 - **NIET** een SMTP-provider instellen "om de herstelmail beter te maken"; het ontbreken daarvan is een bewust besluit (§8.11).
-- **NIET** beloven in de UI dat de herstelmail altijd aankomt; de aflevering is beperkt (§8.11).
+- **NIET** beloven in de UI dat de verificatie-/herstelmail altijd aankomt; de aflevering is beperkt (§8.11).
+- **NIET** een tweede "je account is bevestigd"-mail beloven; die bestaat niet in de standaard Supabase-templates (de bevestiging gebeurt in de app).
 - **NIET** ruwe foutmeldingen (`TypeError`, stack traces, databasefouten) aan de gebruiker tonen.
 - **NIET** `window.confirm` of een dialog gebruiken om items te verwijderen — dat is de twee-staps knop (§8.6).
 - **NIET** `border-radius: 50%` op de item-checkbox; die is vierkant met afgeronde hoeken.

@@ -2,8 +2,8 @@ import { ref, type Ref } from "vue";
 import type { User } from "@supabase/supabase-js";
 
 import {
-  INVITE_INVALID,
-  INVITE_WRONG_EMAIL,
+  EMAIL_NOT_CONFIRMED,
+  isEmailNotConfirmed,
   toAuthErrorMessage,
 } from "../lib/errorMessages";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
@@ -26,6 +26,18 @@ const error: Ref<string | null> = ref(null);
  */
 const recovery: Ref<boolean> = ref(false);
 
+/**
+ * E-mailadres waarvoor een verificatiemail is verzonden. Zolang dit gevuld is
+ * (en er nog geen sessie is) toont `App.vue` de verificatiepagina (AGENTS.md §7.6).
+ */
+const verificationEmail: Ref<string | null> = ref(null);
+
+/**
+ * Staat kort op `true` nadat het e-mailadres via de bevestigingslink is
+ * bevestigd, zodat de app één groene bevestiging kan tonen (AGENTS.md §7.6).
+ */
+const justVerified: Ref<boolean> = ref(false);
+
 /** Het app-scheme; hetzelfde als `custom_url_scheme` in `strings.xml`. */
 const APP_SCHEME = "com.lijstjes.app";
 
@@ -38,6 +50,39 @@ const MIN_PASSWORD_LENGTH = 6;
  */
 export function setRecovery(value: boolean): void {
   recovery.value = value;
+}
+
+/** Idem, voor de bevestiging na een e-mailverificatie. */
+export function setJustVerified(value: boolean): void {
+  justVerified.value = value;
+}
+
+/** Idem, voor het adres van de verificatiepagina. */
+export function setVerificationEmail(value: string | null): void {
+  verificationEmail.value = value;
+}
+
+/** Ligt de app binnen Capacitor (dus niet in een gewone browser)? */
+function isNativePlatform(): boolean {
+  const cap = (
+    globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }
+  ).Capacitor;
+  return cap?.isNativePlatform?.() === true;
+}
+
+/**
+ * Waar Supabase de bevestigings- en herstelmail naartoe stuurt.
+ *
+ * Native: het eigen scheme `com.lijstjes.app://` (deep link, AGENTS.md §8.11).
+ * Web: de origin van de dev-server, zodat registreren en bevestigen in
+ * `npm run dev` te testen is.
+ */
+function emailRedirectTo(): string {
+  if (isNativePlatform()) return `${APP_SCHEME}://`;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return `${APP_SCHEME}://`;
 }
 
 export function useAuth() {
@@ -56,11 +101,8 @@ export function useAuth() {
       return;
     }
     try {
-      supabase.auth.onAuthStateChange((event, session) => {
+      supabase.auth.onAuthStateChange((_event, session) => {
         user.value = session?.user ?? null;
-        // Bij een herstel-link die als page-load binnenkomt (webvariant) vuurt
-        // hier het recovery-event; via een deep link zet `useDeepLink` de vlag.
-        if (event === "PASSWORD_RECOVERY") setRecovery(true);
       });
       const {
         data: { session },
@@ -77,94 +119,106 @@ export function useAuth() {
       error.value = "Supabase is nog niet geconfigureerd.";
       return false;
     }
-    const { error: err } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (err) {
-      error.value = "De inloggegevens zijn onjuist.";
+
+    try {
+      const { error: err } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (err) {
+        if (isEmailNotConfirmed(err)) {
+          // Stuur de gebruiker naar de verificatiepagina.
+          verificationEmail.value = email.trim();
+          error.value = EMAIL_NOT_CONFIRMED;
+        } else {
+          // "Invalid login credentials" mapt naar dezelfde NL-tekst als
+          // voorheen; netwerk-/rate-limitfouten krijgen hun eigen vriendelijke
+          // melding (§7.5).
+          error.value = toAuthErrorMessage(err);
+        }
+        return false;
+      }
+    } catch (thrown) {
+      error.value = toAuthErrorMessage(thrown);
       return false;
     }
+
+    verificationEmail.value = null;
     return true;
   }
 
   /**
-   * Registratie via uitnodiging (AGENTS.md §7.6).
+   * Open registratie (AGENTS.md §7.6).
    *
-   * De volgorde is bewust: eerst de uitnodiging opëisen, dan pas `signUp`. Zou
-   * je andersom werken, dan kan iemand zonder token een account aanmaken op een
-   * geadresseerd e-mailadres en zo de uitnodiging verbranden.
-   *
-   * De client-controle is een gebruiksvriendelijke vooraudit; de échte
-   * afdwinging gebeurt in de database (`before insert on auth.users`).
+   * Met "Confirm email" AAN geeft `signUp` geen sessie terug: de gebruiker moet
+   * eerst op de link in de bevestigingsmail klikken. Bij succes zetten we
+   * `verificationEmail`, zodat `App.vue` de verificatiepagina toont.
    */
-  async function acceptInvite(
-    email: string,
-    password: string,
-    token: string,
-  ): Promise<boolean> {
+  async function register(email: string, password: string): Promise<boolean> {
     error.value = null;
     if (!supabase) {
       error.value = "Supabase is nog niet geconfigureerd.";
       return false;
     }
 
-    const claim = await claimInvite(token);
-    if (!claim.valid) {
-      error.value = INVITE_INVALID;
+    const trimmed = email.trim();
+    if (!trimmed) {
+      error.value = "Vul je e-mailadres in.";
       return false;
     }
-    if (
-      claim.email &&
-      claim.email.toLowerCase() !== email.trim().toLowerCase()
-    ) {
-      error.value = INVITE_WRONG_EMAIL;
-      return false;
-    }
-
     if (password.length < MIN_PASSWORD_LENGTH) {
       error.value = `Het wachtwoord moet minimaal ${MIN_PASSWORD_LENGTH} tekens hebben.`;
       return false;
     }
 
-    const { error: err, data } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-    });
-
-    if (err) {
-      // De triggerfout `no_active_invite` is een databasefout in het Engels;
-      // die mag de gebruiker nooit zien.
-      error.value = toAuthErrorMessage(err);
+    try {
+      const { error: err } = await supabase.auth.signUp({
+        email: trimmed,
+        password,
+        options: { emailRedirectTo: emailRedirectTo() },
+      });
+      if (err) {
+        error.value = toAuthErrorMessage(err);
+        return false;
+      }
+    } catch (thrown) {
+      error.value = toAuthErrorMessage(thrown);
       return false;
     }
 
-    if (!data.session) {
-      // Supabase-beleid: zonder sessie moet de gebruiker zijn mail bevestigen.
-      error.value = "Controleer je e-mail om je account te bevestigen.";
-      return true;
-    }
-
+    verificationEmail.value = trimmed;
     return true;
   }
 
-  /** Roept de RPC `claim_invite` aan; fouten worden als ongeldig behandeld. */
-  async function claimInvite(
-    token: string,
-  ): Promise<{ valid: boolean; email: string | null }> {
-    if (!supabase || !token) return { valid: false, email: null };
+  /** Vraag een nieuwe verificatielink aan (Supabase-drempel: enkele per uur). */
+  async function resendVerification(email: string): Promise<boolean> {
+    error.value = null;
+    if (!supabase) {
+      error.value = "Supabase is nog niet geconfigureerd.";
+      return false;
+    }
+
+    const trimmed = email.trim();
+    if (!trimmed) {
+      error.value = "Vul je e-mailadres in.";
+      return false;
+    }
 
     try {
-      const { data, error: err } = await supabase.rpc("claim_invite", {
-        in_token: token,
+      const { error: err } = await supabase.auth.resend({
+        type: "signup",
+        email: trimmed,
+        options: { emailRedirectTo: emailRedirectTo() },
       });
-      if (err || !data) return { valid: false, email: null };
-      return { valid: Boolean(data.valid), email: data.email ?? null };
-    } catch {
-      // Netwerkfout of onverwachte respons: niet als foutmelding tonen, want
-      // `acceptInvite` zet zelf een leesbare NL-melding.
-      return { valid: false, email: null };
+      if (err) {
+        error.value = toAuthErrorMessage(err);
+        return false;
+      }
+    } catch (thrown) {
+      error.value = toAuthErrorMessage(thrown);
+      return false;
     }
+    return true;
   }
 
   async function resetPassword(email: string): Promise<boolean> {
@@ -173,18 +227,25 @@ export function useAuth() {
       error.value = "Supabase is nog niet geconfigureerd.";
       return false;
     }
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      // Eigen scheme, geen webadres: de app draait zonder webhost.
-      redirectTo: `${APP_SCHEME}://`,
-    });
-    if (err) {
-      error.value = toAuthErrorMessage(err);
+
+    try {
+      const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+        // Eigen scheme, geen webadres: de app draait zonder webhost.
+        redirectTo: emailRedirectTo(),
+      });
+      if (err) {
+        error.value = toAuthErrorMessage(err);
+        return false;
+      }
+    } catch (thrown) {
+      error.value = toAuthErrorMessage(thrown);
       return false;
     }
+
     // Geen SMTP (bewust besluit, AGENTS.md §8.11): de aflevering is beperkt.
-    // We beloven daarom niet dat de mail aankomt, en wijzen op het vangnet.
+    // We beloven daarom niet dat de mail altijd aankomt.
     error.value =
-      "Als dit e-mailadres bekend is, ontvang je een herstelmail. Die kan door de afleverbeperking van Supabase wel eens uitblijven of in de spam belanden — vraag dan de beheerder om een nieuw wachtwoord.";
+      "Als dit e-mailadres bekend is, ontvang je een herstelmail. Die kan door de afleverbeperking van Supabase uitblijven of in de spam belanden.";
     return true;
   }
 
@@ -202,13 +263,20 @@ export function useAuth() {
       error.value = `Het wachtwoord moet minimaal ${MIN_PASSWORD_LENGTH} tekens hebben.`;
       return false;
     }
-    const { error: err } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-    if (err) {
-      error.value = toAuthErrorMessage(err);
+
+    try {
+      const { error: err } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (err) {
+        error.value = toAuthErrorMessage(err);
+        return false;
+      }
+    } catch (thrown) {
+      error.value = toAuthErrorMessage(thrown);
       return false;
     }
+
     setRecovery(false);
     return true;
   }
@@ -218,11 +286,13 @@ export function useAuth() {
     await supabase?.auth.signOut();
     user.value = null;
     setRecovery(false);
+    setJustVerified(false);
+    setVerificationEmail(null);
   }
 
-  // `onMounted` staat bewust NIET meer in deze composable: buiten een
+  // `onMounted` staat bewust NIET in deze composable: buiten een
   // component-context werkt dat niet, en het maakt de auth-laag ontestbaar onder
-  // vitest. `App.vue` roept `init()` aan in zijn eigen `onMounted` (A2.2).
+  // vitest. `App.vue` roept `init()` aan in zijn eigen `onMounted` (§5).
 
   return {
     user,
@@ -230,11 +300,17 @@ export function useAuth() {
     error,
     configured,
     recovery,
+    verificationEmail,
+    justVerified,
     init,
     signIn,
-    acceptInvite,
+    register,
+    resendVerification,
     resetPassword,
     updatePassword,
     signOut,
+    setRecovery,
+    setJustVerified,
+    setVerificationEmail,
   };
 }

@@ -1,22 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { INVITE_INVALID, INVITE_WRONG_EMAIL } from "../lib/errorMessages";
+import { EMAIL_NOT_CONFIRMED, NETWORK_ERROR } from "../lib/errorMessages";
 
-const { mockRpc, mockSignUp, mockGetSession } = vi.hoisted(() => ({
-  mockRpc: vi.fn(),
-  mockSignUp: vi.fn(),
-  mockGetSession: vi.fn(),
-}));
+const { mockSignUp, mockSignIn, mockResend, mockGetSession } = vi.hoisted(
+  () => ({
+    mockSignUp: vi.fn(),
+    mockSignIn: vi.fn(),
+    mockResend: vi.fn(),
+    mockGetSession: vi.fn(),
+  }),
+);
 
 vi.mock("../lib/supabase", () => ({
   supabase: {
-    rpc: mockRpc,
     auth: {
       signUp: mockSignUp,
-      signInWithPassword: vi.fn(),
+      signInWithPassword: mockSignIn,
+      resend: mockResend,
       signOut: vi.fn(),
       updateUser: vi.fn(),
       resetPasswordForEmail: vi.fn(),
+      setSession: vi.fn(),
       onAuthStateChange: vi.fn(),
       getSession: mockGetSession,
     },
@@ -26,94 +30,59 @@ vi.mock("../lib/supabase", () => ({
 
 import { useAuth } from "./useAuth";
 
-/** Claim-response die een geldige uitnodiging voor een bepaald adres simuleert. */
-function validClaim(email: string): void {
-  mockRpc.mockResolvedValue({
-    data: { valid: true, email },
-    error: null,
-  });
-}
-
-describe("useAuth.acceptInvite (AGENTS.md §7.6)", () => {
+describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)", () => {
   const AUTH = useAuth();
 
   beforeEach(() => {
-    mockRpc.mockReset();
     mockSignUp.mockReset();
+    mockSignIn.mockReset();
+    mockResend.mockReset();
     mockGetSession.mockReset();
     // De module-state (singleton) staat tussen tests aan; altijd schoon beginnen.
     AUTH.error.value = null;
     AUTH.initialized.value = false;
     AUTH.user.value = null;
+    AUTH.verificationEmail.value = null;
+    AUTH.justVerified.value = false;
+    AUTH.recovery.value = false;
   });
 
   afterEach(() => {
     AUTH.error.value = null;
+    AUTH.verificationEmail.value = null;
+    AUTH.justVerified.value = false;
+    AUTH.recovery.value = false;
   });
 
-  it("roept eerst claim_invite aan en dan pas signUp (volgorde is beveiliging)", async () => {
-    const email = "genodigde@voorbeeld.nl";
-    validClaim(email);
+  it("roept signUp aan met een emailRedirectTo en zet verificationEmail", async () => {
     mockSignUp.mockResolvedValue({
-      data: { session: { user: { email } }, user: null },
+      data: { session: null, user: { id: "u1" } },
       error: null,
     });
 
-    const ok = await AUTH.acceptInvite(email, "geheim123", "TOKEN");
+    const ok = await AUTH.register("  nieuw@voorbeeld.nl  ", "geheim123");
 
     expect(ok).toBe(true);
-    expect(mockRpc).toHaveBeenCalledWith("claim_invite", { in_token: "TOKEN" });
-    expect(mockSignUp).toHaveBeenCalledWith({
-      email,
-      password: "geheim123",
-    });
-    const rpcOrder = mockRpc.mock.invocationCallOrder[0] ?? -1;
-    const signUpOrder = mockSignUp.mock.invocationCallOrder[0] ?? -1;
-    expect(rpcOrder).toBeLessThan(signUpOrder);
+    const arg = mockSignUp.mock.calls[0]?.[0];
+    expect(arg.email).toBe("nieuw@voorbeeld.nl");
+    expect(arg.password).toBe("geheim123");
+    expect(typeof arg.options.emailRedirectTo).toBe("string");
+    expect(AUTH.verificationEmail.value).toBe("nieuw@voorbeeld.nl");
   });
 
-  it("weigert een ander e-mailadres dan de uitnodiging, zonder signUp", async () => {
-    validClaim("genodigde@voorbeeld.nl");
-
-    const ok = await AUTH.acceptInvite(
-      "ander@voorbeeld.nl",
-      "geheim123",
-      "TOKEN",
-    );
-
-    expect(ok).toBe(false);
-    expect(AUTH.error.value).toBe(INVITE_WRONG_EMAIL);
-    expect(mockSignUp).not.toHaveBeenCalled();
-  });
-
-  it("laat cases in het e-mailadres buiten beschouwing (trim + toLowerCase)", async () => {
-    validClaim("Genodigde@Voorbeeld.nl");
+  it("geeft geen sessie: de gebruiker is na registreren niet ingelogd", async () => {
     mockSignUp.mockResolvedValue({
-      data: { session: { user: { email: "genodigde@voorbeeld.nl" } } },
+      data: { session: null, user: { id: "u1" } },
       error: null,
     });
 
-    const ok = await AUTH.acceptInvite(
-      "  genodigde@voorbeeld.nl  ",
-      "geheim123",
-      "TOKEN",
-    );
+    await AUTH.register("nieuw@voorbeeld.nl", "geheim123");
 
-    expect(ok).toBe(true);
-    expect(mockSignUp).toHaveBeenCalledWith({
-      email: "genodigde@voorbeeld.nl",
-      password: "geheim123",
-    });
+    expect(AUTH.user.value).toBeNull();
   });
 
   it("weigert een te kort wachtwoord zonder signUp", async () => {
-    validClaim("genodigde@voorbeeld.nl");
-
-    const ok = await AUTH.acceptInvite(
-      "genodigde@voorbeeld.nl",
-      "12345",
-      "TOKEN",
-    );
+    const ok = await AUTH.register("nieuw@voorbeeld.nl", "12345");
 
     expect(ok).toBe(false);
     expect(AUTH.error.value).toBe(
@@ -122,32 +91,118 @@ describe("useAuth.acceptInvite (AGENTS.md §7.6)", () => {
     expect(mockSignUp).not.toHaveBeenCalled();
   });
 
-  it("mapt de triggerfout no_active_invite naar de NL-uitnodigingstekst", async () => {
-    validClaim("genodigde@voorbeeld.nl");
+  it("mapt een bestaand account naar de NL-tekst", async () => {
     mockSignUp.mockResolvedValue({
       data: { session: null, user: null },
       error: {
-        message: "Database error saving new user",
-        code: "no_active_invite",
+        message: "User already registered",
+        code: "user_already_exists",
       },
     });
 
-    const ok = await AUTH.acceptInvite(
-      "genodigde@voorbeeld.nl",
-      "geheim123",
-      "TOKEN",
-    );
+    const ok = await AUTH.register("bestaat@voorbeeld.nl", "geheim123");
 
     expect(ok).toBe(false);
-    expect(AUTH.error.value).toBe(INVITE_INVALID);
+    expect(AUTH.error.value).toBe(
+      "Er bestaat al een account met dit e-mailadres.",
+    );
   });
 
-  it("biedt geen open signUp aan in de API (registratie alleen via uitnodiging)", () => {
+  it("toont nooit een ruwe technische fout bij een netwerkstoring", async () => {
+    mockSignUp.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const ok = await AUTH.register("nieuw@voorbeeld.nl", "geheim123");
+
+    expect(ok).toBe(false);
+    expect(AUTH.error.value).toBe(NETWORK_ERROR);
+  });
+
+  it("stuurt een onbevestigde gebruiker naar de verificatiepagina", async () => {
+    mockSignIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: { message: "Email not confirmed", code: "email_not_confirmed" },
+    });
+
+    const ok = await AUTH.signIn("onbevestigd@voorbeeld.nl", "geheim123");
+
+    expect(ok).toBe(false);
+    expect(AUTH.error.value).toBe(EMAIL_NOT_CONFIRMED);
+    expect(AUTH.verificationEmail.value).toBe("onbevestigd@voorbeeld.nl");
+  });
+
+  it("toont een NL-melding bij onjuiste inloggegevens", async () => {
+    mockSignIn.mockResolvedValue({
+      data: { session: null, user: null },
+      error: {
+        message: "Invalid login credentials",
+        code: "invalid_credentials",
+      },
+    });
+
+    const ok = await AUTH.signIn("iemand@voorbeeld.nl", "verkeerd");
+
+    expect(ok).toBe(false);
+    expect(AUTH.error.value).toBe("De inloggegevens zijn onjuist.");
+  });
+
+  it("toont een netwerkmelding (geen ruwe fout) bij een storing tijdens login", async () => {
+    mockSignIn.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const ok = await AUTH.signIn("iemand@voorbeeld.nl", "geheim123");
+
+    expect(ok).toBe(false);
+    expect(AUTH.error.value).toBe(NETWORK_ERROR);
+  });
+
+  it("wist verificationEmail bij een geslaagde login", async () => {
+    AUTH.verificationEmail.value = "oud@voorbeeld.nl";
+    mockSignIn.mockResolvedValue({
+      data: { session: { user: { email: "oud@voorbeeld.nl" } }, user: null },
+      error: null,
+    });
+
+    const ok = await AUTH.signIn("oud@voorbeeld.nl", "geheim123");
+
+    expect(ok).toBe(true);
+    expect(AUTH.verificationEmail.value).toBeNull();
+  });
+
+  it("vraagt een nieuwe verificatielink aan met type signup", async () => {
+    mockResend.mockResolvedValue({ data: {}, error: null });
+
+    const ok = await AUTH.resendVerification("nieuw@voorbeeld.nl");
+
+    expect(ok).toBe(true);
+    expect(mockResend).toHaveBeenCalledWith({
+      type: "signup",
+      email: "nieuw@voorbeeld.nl",
+      options: { emailRedirectTo: expect.any(String) },
+    });
+  });
+
+  it("mapt een rate limit bij resend naar een vriendelijke NL-tekst", async () => {
+    mockResend.mockResolvedValue({
+      data: {},
+      error: {
+        message: "Email rate limit exceeded",
+        code: "over_email_send_rate_limit",
+      },
+    });
+
+    const ok = await AUTH.resendVerification("nieuw@voorbeeld.nl");
+
+    expect(ok).toBe(false);
+    expect(AUTH.error.value).toBe(
+      "Er zijn te veel verzoeken verstuurd. Probeer het later opnieuw.",
+    );
+  });
+
+  it("biedt geen uitnodigings-API meer aan", () => {
     const api = AUTH as unknown as Record<string, unknown>;
-    expect("signUp" in api).toBe(false);
-    expect(api.signUp).toBeUndefined();
-    // Alleen acceptInvite is de weg naar een account.
-    expect(typeof api.acceptInvite).toBe("function");
+    expect(api.acceptInvite).toBeUndefined();
+    expect(api.claimInvite).toBeUndefined();
+    expect(typeof api.register).toBe("function");
+    expect(typeof api.resendVerification).toBe("function");
   });
 
   it("init() zet de gebruiker en initialized-status vanuit de sessie (A2)", async () => {

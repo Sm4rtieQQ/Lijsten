@@ -71,10 +71,10 @@ function onBackdropClick(event: MouseEvent): void {
       />
       <p v-if="error" class="confirm-error" role="alert">{{ error }}</p>
       <div class="confirm-actions">
-        <button class="secondary-button" type="button" @click="onCancel">
+        <button class="confirm-action" type="button" @click="onCancel">
           Annuleren
         </button>
-        <button class="dialog-submit confirm-delete" type="submit">
+        <button class="confirm-action is-danger" type="submit">
           Verwijderen
         </button>
       </div>
@@ -138,5 +138,36 @@ function onBackdropClick(event: MouseEvent): void {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 26px;
+}
+/* Route B (AGENTS.md §8.3): eigen knopstijl voor de dialoog, los van
+   `.dialog-submit`. Beide knoppen even hoog via `min-height`, met kleinere
+   tekst dan de primaire knop. */
+.confirm-action {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.confirm-action:hover {
+  border-color: var(--orange);
+  background: var(--orange-soft);
+}
+.confirm-action.is-danger {
+  border-color: transparent;
+  color: #fff;
+  background: var(--orange);
+}
+.confirm-action.is-danger:hover {
+  background: var(--orange-dark);
+}
+.confirm-action:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
 }
 </style>
