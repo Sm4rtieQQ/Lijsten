@@ -103,7 +103,7 @@
     (net als `setRecovery`), zodat `useDeepLink` hem kan zetten.
   - **`signIn`:** detecteer de Supabase-fout "email not confirmed" → zet
     `verificationEmail.value = email` en een leesbare NL-melding.
-  - **`emailRedirectTo`:** native → `com.lijstjes.app://`, web → `window.location.origin`
+  - **`emailRedirectTo`:** native → `com.lijstjes.app://`, web → `window.location.origin` + `window.location.pathname`
     (zodat bevestigen in `npm run dev` te testen is). Eén helper, gebruikt door `register`
     én `resendVerification`.
   - Ongewijzigd laten: `resetPassword`, `updatePassword`, `signOut`, `init`, `recovery`.

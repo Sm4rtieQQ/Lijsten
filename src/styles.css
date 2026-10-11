@@ -31,8 +31,13 @@ button {
 .app-shell {
   width: min(100%, 760px);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: auto;
-  padding: 48px 28px 64px;
+  /* Veilige zones (iPhone-notch + home-indicator) bij 'Zet op beginscherm' — zie AGENTS.md §8.12. */
+  padding: calc(48px + env(safe-area-inset-top))
+    calc(28px + env(safe-area-inset-right))
+    calc(64px + env(safe-area-inset-bottom))
+    calc(28px + env(safe-area-inset-left));
 }
 .view {
   display: none;
@@ -1040,7 +1045,10 @@ dialog {
 }
 @media (max-width: 520px) {
   .app-shell {
-    padding: 32px 18px 48px;
+    padding: calc(32px + env(safe-area-inset-top))
+      calc(18px + env(safe-area-inset-right))
+      calc(48px + env(safe-area-inset-bottom))
+      calc(18px + env(safe-area-inset-left));
   }
   h1 {
     font-size: 36px;

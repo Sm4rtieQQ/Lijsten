@@ -34,6 +34,7 @@
 | `npm run test`          | Voert de vitest-tests één keer uit (niet-watch). **Verplicht** voordat een taak op `[x]` mag.                                                                  |
 | `npm run test:watch`    | Vitest in watchmodus, voor tijdens het ontwikkelen.                                                                                                            |
 | `npm run preview`       | Preview van de productie-build (`dist/`) lokaal.                                                                                                               |
+| `npm run preview:host`  | Test de productie-build op je telefoon via het lokale netwerk (`vite preview --host`). PWA-installatie vereist HTTPS; LAN-http is alleen voor lay-out.         |
 | `npm run verify:data`   | Bundelt en voert `scripts/verify-data-layer.ts` uit: geautomatiseerde checks van de data-laag (per-user isolatie, geen bulk-wipe, FIFO outbox, retry/backoff). |
 | `npm run android:sync`  | `npx cap sync android` — kopieert `dist/` naar Android (`webDir: dist`). Alleen gebruiken nadat er een succesvolle build is.                                   |
 | `npm run android:build` | `npx cap build android --androidreleasetype APK` — bouwt een **release**-APK. **Pas uitvoeren na akkoord van de gebruiker.**                                   |
@@ -58,7 +59,7 @@ Lijsten/
 ├── tasks.md                # Voortgang per fase (verwijst naar het actieve plan)
 ├── task_02.md              # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
 ├── tasks_03.md             # Actief plan: open registratie + e-mailverificatie
-├── index.html              # Vite entry (incl. Google Fonts-link)
+├── index.html              # Vite entry (fonts + PWA-/iOS-meta)
 ├── package.json
 ├── capacitor.config.json   # webDir: dist
 ├── vite.config.ts          # Vite + vitest config
@@ -67,6 +68,8 @@ Lijsten/
 ├── tsconfig.node.json
 ├── supabase-schema.sql     # Schema + RLS voor lists/list_items (idem uitvoerbaar)
 ├── supabase-verification.sql  # Sjabloon voor e-mailverificatie (invite eruit + RLS-grendel + beheer)
+├── public/                 # PWA-assets: manifest.webmanifest, sw.js, icons/, favicon.svg
+├── .github/workflows/      # CI: deploy naar GitHub Pages (deploy-pages.yml)
 ├── scripts/
 │   └── verify-data-layer.ts  # Geautomatiseerde fase 2 checks (npm run verify:data)
 ├── src/
@@ -92,6 +95,8 @@ Lijsten/
 │   │   ├── useArmedConfirm.ts    # Twee-staps bevestiging (§8.6)
 │   │   ├── useDeepLink.ts        # Deep link: bevestiging + herstel (§8.11)
 │   │   └── *.spec.ts
+│   ├── pwa/
+│   │   └── register-sw.ts       # Service worker-registratie (PWA, §8.12)
 │   └── lib/
 │       ├── supabase.ts
 │       ├── database.types.ts   # Centrale Supabase Database types (lists, list_items)
@@ -188,7 +193,7 @@ Er is **open registratie**, maar een account is pas bruikbaar **nadat het e-mail
 - **Aanmelden:** `RegisterView.vue` stuurt `supabase.auth.signUp({ email, password, options: { emailRedirectTo } })`. De gebruiker kiest zelf een e-mailadres en wachtwoord (minimaal **6 tekens**); er is geen token of uitnodiging meer.
 - **Bevestigingsmail:** Supabase verstuurt de "Confirm signup"-mail met `{{ .ConfirmationURL }}`. Na signup is er **geen sessie**: de app toont `VerifyEmailView.vue` met `Er is een email verzonden naar <email>. Klik op de link in de mail om uw account te accepteren.` en een link om een **nieuwe** verificatielink op te vragen (`resendVerification`).
 - **Afdwinging gebeurt in de database**, niet in de app: de Supabase-instelling **"Confirm email" staat AAN** (inloggen zonder bevestiging wordt server-side geweigerd) én de RLS-policies van `lists`/`list_items` eisen `public.is_email_confirmed()` (in `supabase-verification.sql`). Een sessie zonder bevestiging kan dus niets lezen of schrijven.
-- **Bevestigingslink:** `emailRedirectTo` is native `com.lijstjes.app://` en op het web `window.location.origin` (zodat dit in `npm run dev` te testen is). De link logt de gebruiker **automatisch in**; de app toont daarna een kleine **groene bevestiging**.
+- **Bevestigingslink:** `emailRedirectTo` is native `com.lijstjes.app://` en op het web de volledige pagina-URL (`origin` **plus** `pathname`), zodat het ook onder een subpad zoals de GitHub Pages-projectpagina `/Lijsten/` klopt (zie §10.3). De link logt de gebruiker **automatisch in**; de app toont daarna een kleine **groene bevestiging**.
 - **Verificatietokens** (in de URL-hash) worden niet gelogd, niet in `localStorage` bewaard en niet in de UI of in foutmeldingen getoond; ze worden meteen uit de URL gehaald (`history.replaceState`).
 - **Het uitnodigingssysteem is volledig verwijderd:** geen `invites`/`invite_claims`, geen `claim_invite`, geen `enforce_invite_on_signup`-trigger en geen `com.lijstjes.app://invite` deep link. De oude `supabase-invites.sql` is vervangen door `supabase-verification.sql`.
 - **Geen eigen SMTP-provider.** Bewust besluit: de bevestigings- en herstelmail gaan via de standaardaflevering van Supabase, met een harde limiet van enkele mails per uur en een kans op spam. De mail kan dus uitblijven. De UI meldt dit zonder technische termen als "rate limit" of "SMTP"; de resend-knop heeft een **cooldown van 60 seconden**.
@@ -295,14 +300,28 @@ De app draait als **Android-app zonder webhost**. Er is dus geen webadres; de **
 - **Scheme:** `com.lijstjes.app`, vastgelegd in `android/app/src/main/res/values/strings.xml` als `custom_url_scheme`. Wijzig dit niet zonder de `AndroidManifest.xml` en de Supabase Site URL mee te wijzigen.
 - **Intent-filter:** in `AndroidManifest.xml` een **tweede** `<intent-filter>` in de `<activity>`, met `VIEW` / `DEFAULT` / `BROWSABLE` en `<data android:scheme="@string/custom_url_scheme" />`. **Zonder `android:autoVerify="true"`** — dat geldt alleen voor App Links op een gedomein dat je bezit, en het zou de custom scheme laten falen.
 - **Ontvangen:** bij het opstarten `App.getLaunchUrl()` én tijdens het draaien `App.addListener("appUrlOpen", …)`. Beide zijn nodig: de eerste voor een cold start, de tweede als de app al open staat. Ruim de listener op in `onBeforeUnmount`.
-- **Bevestigingslink:** de "Confirm signup"-mail linkt naar `emailRedirectTo` = `com.lijstjes.app://` (native) of `window.location.origin` (web). Omdat `flowType` `implicit` is, zit het tokenpaar in de **hash** met `type=signup`. `useDeepLink` leest die hash, roept `setSession({ access_token, refresh_token })` aan en zet `setJustVerified(true)` — de gebruiker is daarna ingelogd en ziet de groene bevestiging.
-- **Webvariant:** op het web gebeurt dezelfde redirect naar de gebruikte origin (`http://localhost:5173`), zodat registratie in `npm run dev` te testen is. De deep link `com.lijstjes.app://` werkt niet in een browser.
+- **Bevestigingslink:** de "Confirm signup"-mail linkt naar `emailRedirectTo` = `com.lijstjes.app://` (native) of de volledige pagina-URL (`origin` + `pathname`, web). Omdat `flowType` `implicit` is, zit het tokenpaar in de **hash** met `type=signup`. `useDeepLink` leest die hash, roept `setSession({ access_token, refresh_token })` aan en zet `setJustVerified(true)` — de gebruiker is daarna ingelogd en ziet de groene bevestiging.
+- **Webvariant:** op het web gebeurt dezelfde redirect naar de volledige pagina-URL (dev-server `http://localhost:5173/`; GitHub Pages `https://sm4rtieqq.github.io/Lijsten/`), zodat registratie in `npm run dev` én in de PWA te testen is. De deep link `com.lijstjes.app://` werkt niet in een browser.
 - **Gevolg:** de deep link werkt alleen waar de app geïnstalleerd is. Op een computer doet het scheme niets.
-- **Wachtwoord herstellen:** `resetPasswordForEmail(email, { redirectTo: "com.lijstjes.app://" })`. De recovery-sessie komt binnen als intent.
+- **Wachtwoord herstellen:** `resetPasswordForEmail(email, { redirectTo: emailRedirectTo() })` — native `com.lijstjes.app://`, web de volledige pagina-URL. De recovery-sessie komt binnen als intent.
   - **Let op:** `supabase.auth.getSessionFromUrl()` bestaat **niet** als publieke API in de huidige `@supabase/auth-js` (`_getSessionFromURL` is `private`). Omdat `flowType` standaard `implicit` is, zit het tokenpaar in de **hash** van de herstellink. `useDeepLink.handleIncomingUrl` leest die hash zelf en roept de wel publieke `supabase.auth.setSession({ access_token, refresh_token })` aan. Verzin geen cast om de private methode toch aan te roepen.
   - `setSession` vuurt daarna `SIGNED_IN`, **niet** `PASSWORD_RECOVERY`. Daarom zet `useDeepLink` de vlag met `setRecovery(true)` uit `useAuth`, in plaats van op het event te wachten. `src/lib/supabase.ts` staat op `detectSessionInUrl: false`, zodat `useDeepLink` de enige plek is die de URL-hash leest en verwerkt.
   - **Onderscheid recovery vs. bevestiging:** `isRecoveryUrl(url)` → `type=recovery`, `isSignupConfirmationUrl(url)` → `type=signup` (+ tokenpaar). Zonder dat onderscheid zou een bevestigingslink ten onrechte naar `ResetPasswordView` leiden.
 - **Geen SMTP-provider.** Bewust besluit: de herstel- en verificatiemail gaan via de standaardaflevering van Supabase, met een harde limiet van enkele mails per uur en een hoge kans op spam. De mail kan dus uitblijven. De UI meldt dit zonder technische termen als "rate limit" of "SMTP" en houdt voor het opnieuw aanvragen een cooldown aan.
+
+### 8.12 PWA (Safari/iOS en webinstallatie)
+
+Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is **geen** Capacitor-schil voor nodig: het is de webapp + een manifest + een service worker, geïnstalleerd door de browser.
+
+- **Bestanden:** `public/manifest.webmanifest`, `public/sw.js`, `public/icons/*` (192/512 + maskable + `apple-touch-icon` 180) en `public/favicon.svg`. De registratie staat in `src/pwa/register-sw.ts` (niet in dev, niet in de Capacitor-app, faalt stil).
+- **`index.html`** bevat de iOS-meta's: `apple-touch-icon`, `apple-mobile-web-app-capable/status-bar-style/title`, `mobile-web-app-capable`, `theme-color` en `viewport-fit=cover`.
+- **Safari iOS:** installeren via **Delen → Zet op beginscherm**. `display: standalone` uit het manifest (plus de meta-tag) laat de app zonder browserchrome openen.
+- **Veilige zones:** `.app-shell` in `styles.css` verrekent `env(safe-area-inset-*)` (notch + home-indicator). Er zijn **twee** `.app-shell`-regels (basis + `max-width: 520px`); wijzig ze samen (§9).
+- **Deep links verschillen:** een browser kent `com.lijstjes.app://` niet. Op het web is `emailRedirectTo` daarom de volledige pagina-URL (`window.location.origin` **plus** `window.location.pathname`, zie §8.11), zodat een projectpagina onder `/Lijsten/` klopt. Voor de PWA moet dat **https-adres** in Supabase bij **Redirect URLs** staan (en in Site URL). Dat is dashboard-configuratie, geen code.
+- **Offline:** Supabase-verkeer (andere origin) wordt **nooit** gecacht; de app-shell wel. De data is toch al offline-first (§7).
+- **Service worker-versie:** verhoog `CACHE_VERSION` in `public/sw.js` wanneer de app-shell wijzigt, zodat oude caches worden opgeruimd.
+- **Iconen:** de PNG's zijn gerasterd uit `public/icons/icon.svg` en `icon-maskable.svg` (ImageMagick). Wijzig de SVG en raster opnieuw; bewerk de PNG's niet met de hand.
+- **Testen:** Firefox is bruikbaar om de webapp te testen, maar installeert geen PWA. Gebruik Chrome (desktop/Android) of Safari (iOS). `npm run preview:host` toont de build op je telefoon via het LAN (http → alleen lay-out; voor de echte installatie is HTTPS nodig).
 
 ## 9. Stijl, conventies & kwaliteit
 
@@ -385,6 +404,17 @@ De Android `.apk` export gebeurt **alleen nadat de gebruiker expliciet zegt dat 
 7. **Verifieren & artefact**
    - Verifieer met `apksigner verify --print-certs <apk>` (optioneel).
    - Het `.apk` wordt **niet** in de repo vastgelegd (groot bestand, en `*.apk` staat in `.gitignore`). Alleen lokaal bewaren volgens instructie van de gebruiker.
+
+### 10.3 PWA-publicatie (GitHub Pages)
+
+De PWA wordt **automatisch** gedeployed naar GitHub Pages door `.github/workflows/deploy-pages.yml` bij elke push naar `master` (of handmatig via _workflow_dispatch_).
+
+- **Eenmalig instellen:** repo → _Settings → Pages → Build and deployment → Source: **GitHub Actions**_.
+- **Secrets:** zet `VITE_SUPABASE_URL` en `VITE_SUPABASE_ANON_KEY` als repository-secrets, anders bouwt de PWA zonder Supabase-config en toont de app een melding. De anon-key is publiek van nature (RLS beschermt de data), maar secrets houden de workflow schoon.
+- **Adres:** `https://sm4rtieqq.github.io/Lijsten/`.
+- **Waarom dit werkt zonder base-aanpassing:** `vite.config.ts` staat op `base: "./"` (nodig voor de Capacitor-WebView), dus assets én de service worker worden **relatief** geladen en werken ook onder een subpad. Verwijs in `index.html` naar publieke bestanden met een **root-absoluut** pad (`/manifest.webmanifest`); Vite zet dat met `base: "./"` om naar een relatief pad.
+- **Supabase (dashboard):** zet `https://sm4rtieqq.github.io/Lijsten/` ook in **Site URL** en **Redirect URLs**, anders komt de bevestigings-/herstelmail niet terug in de PWA.
+- **Volgorde:** de workflow draait eerst `npm ci`, `npm run test` en `npm run build`; een falende test of typecheck blokkeert de deploy.
 
 ## 11. Lessons learned (niet opnieuw doen)
 

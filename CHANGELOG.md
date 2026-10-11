@@ -3,6 +3,18 @@
 Alle noemenswaardige wijzigingen aan Lijstjes, nieuwste bovenaan.
 Notatie: versienummer = `package.json` / Android `versionName` (`versionCode`).
 
+## [Unreleased]
+
+### PWA (Safari/iOS)
+
+- De webapp is nu installeerbaar als PWA: manifest, service worker (app-shell offline),
+  webapp-iconen en een apple-touch-icon.
+- Op iPhone via Safari → **Delen → Zet op beginscherm**; opent zonder browserchrome
+  (`display: standalone`) en respecteert de veilige zones (notch/home-indicator).
+- Automatische deploy naar GitHub Pages (`https://sm4rtieqq.github.io/Lijsten/`).
+- Let op: een browser kent `com.lijstjes.app://` niet; de verificatie-/herstelmail linkt op
+  het web naar de volledige pagina-URL (origin + pad), dat adres moet in Supabase bij de Redirect URLs staan.
+
 ## [1.3.0] — 2026-10-11
 
 **Oud:** 1.2.0 — `versionName "1.2"` (`versionCode 2`)
