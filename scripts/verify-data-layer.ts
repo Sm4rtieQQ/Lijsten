@@ -62,12 +62,20 @@ interface FauxClientOptions {
   shouldFail?: (call: Call) => boolean;
   /** Data die `select` teruggeeft (voor pull-tests). */
   selectData?: unknown;
+  /**
+   * Bestaan de functies uit supabase-reorder.sql? Standaard niet (zoals vóór
+   * het uitvoeren van het script): de app valt dan terug op per-item-updates.
+   */
+  rpcAvailable?: boolean;
 }
 
 /** Nep-Supabase-client die alle calls registreert en optioneel faalt. */
 function makeFauxClient(options: FauxClientOptions = {}): {
   calls: Call[];
-  backend: { from: (table: string) => unknown };
+  backend: {
+    from: (table: string) => unknown;
+    rpc: (fn: string, args: unknown) => Promise<unknown>;
+  };
 } {
   const calls: Call[] = [];
 
@@ -150,7 +158,29 @@ function makeFauxClient(options: FauxClientOptions = {}): {
     return chain;
   };
 
-  return { calls, backend: { from } };
+  const rpc = (fn: string, args: unknown) => {
+    const call: Call = {
+      table: fn,
+      op: "rpc",
+      filters: [],
+      orders: [],
+      row: args,
+    };
+    calls.push(call);
+    if (!options.rpcAvailable) {
+      return Promise.resolve({
+        data: null,
+        error: { code: "PGRST202", message: "Could not find the function" },
+      });
+    }
+    const fail = options.shouldFail ? options.shouldFail(call) : false;
+    return Promise.resolve({
+      data: null,
+      error: fail ? { message: `fake-failure:rpc:${fn}` } : null,
+    });
+  };
+
+  return { calls, backend: { from, rpc } };
 }
 
 let passed = 0;
@@ -490,7 +520,8 @@ async function testReorderOperations(): Promise<void> {
 
 async function testCompactionBeforeFlush(): Promise<void> {
   const mem = memoryStorage();
-  const faux = makeFauxClient();
+  // Na het uitvoeren van supabase-reorder.sql: de reorder is één rpc-call.
+  const faux = makeFauxClient({ rpcAvailable: true });
   const i1 = item("I1", "L1", "melk");
   const i2 = item("I2", "L1", "brood");
 
@@ -521,7 +552,7 @@ async function testCompactionBeforeFlush(): Promise<void> {
   const ops = faux.calls.map((c) => `${c.op}:${c.table}`);
   assert(
     JSON.stringify(ops) ===
-      JSON.stringify(["insert:list_items", "update:list_items"]),
+      JSON.stringify(["insert:list_items", "rpc:reorder_items"]),
     `één insert met de eindstand + één reorder (kreeg: ${ops.join(", ")})`,
   );
   const inserted = faux.calls[0]?.row as { text?: string; done?: boolean };
@@ -700,6 +731,74 @@ async function testBatchedRequests(): Promise<void> {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Volgorde via de databasefunctie, met terugval (§7.3, supabase-reorder.sql)
+// ---------------------------------------------------------------------------
+
+async function testReorderViaRpc(): Promise<void> {
+  const reorders = (): OutboxEntry[] => [
+    entry({ type: "item.reorder", listId: "L1", itemIds: ["I3", "I1", "I2"] }),
+    entry({ type: "list.reorder", listIds: ["L2", "L1"] }),
+  ];
+
+  // Functies bestaan: één rpc-call per reorder, geen updates per item.
+  const mem = memoryStorage();
+  const faux = makeFauxClient({ rpcAvailable: true });
+  saveQueue("userA", reorders(), mem);
+  const result = await flushOutbox("userA", client(faux.backend), mem);
+  assert(result.ok, "reorders via rpc slagen");
+  assert(
+    faux.calls.map((c) => `${c.op}:${c.table}`).join(",") ===
+      "rpc:reorder_items,rpc:reorder_lists",
+    "één rpc-call per reorder, geen per-item-updates",
+  );
+  assert(
+    JSON.stringify(faux.calls[0]?.row) ===
+      JSON.stringify({ p_list_id: "L1", p_item_ids: ["I3", "I1", "I2"] }),
+    "reorder_items krijgt lijst-id en volgorde",
+  );
+  assert(
+    JSON.stringify(faux.calls[1]?.row) ===
+      JSON.stringify({ p_list_ids: ["L2", "L1"] }),
+    "reorder_lists krijgt de lijstvolgorde",
+  );
+
+  // Functies bestaan (nog) niet: terugval, en daarna niet steeds opnieuw proberen.
+  const mem2 = memoryStorage();
+  const missing = makeFauxClient();
+  saveQueue("userA", reorders(), mem2);
+  const fallback = await flushOutbox("userA", client(missing.backend), mem2);
+  assert(fallback.ok, "terugval op per-item-updates slaagt");
+  const rpcCalls = missing.calls.filter((c) => c.op === "rpc").length;
+  const updates = missing.calls.filter((c) => c.op === "update").length;
+  assert(
+    rpcCalls === 1,
+    `één mislukte rpc-poging, daarna onthouden (kreeg ${rpcCalls})`,
+  );
+  assert(updates === 5, `terugval: 3 + 2 updates (kreeg ${updates})`);
+
+  // Een echte fout van de functie: geen terugval, wel een NL-fout + retry.
+  const mem3 = memoryStorage();
+  const failing = makeFauxClient({
+    rpcAvailable: true,
+    shouldFail: (call) => call.op === "rpc",
+  });
+  saveQueue("userA", reorders().slice(0, 1), mem3);
+  const failed = await flushOutbox("userA", client(failing.backend), mem3);
+  assert(
+    !failed.ok && failed.error !== null,
+    "rpc-fout → mislukt met NL-tekst",
+  );
+  assert(
+    !failing.calls.some((c) => c.op === "update"),
+    "bij een echte fout geen terugval (anders half opgeslagen)",
+  );
+  assert(
+    loadQueue("userA", mem3)[0]?.attempts === 1,
+    "reorder blijft gemarkeerd staan",
+  );
+}
+
 async function testPullOrder(): Promise<void> {
   const faux = makeFauxClient({
     selectData: [
@@ -777,6 +876,7 @@ async function main(): Promise<void> {
   await testCompactionBeforeFlush();
   await testFlushSettlesQueue();
   await testBatchedRequests();
+  await testReorderViaRpc();
   testExactTitleMatch();
 
   console.log(

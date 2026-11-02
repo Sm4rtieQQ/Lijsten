@@ -73,6 +73,7 @@ Lijsten/
 ├── tsconfig.node.json
 ├── supabase-schema.sql     # Schema + RLS voor lists/list_items (idem uitvoerbaar)
 ├── supabase-verification.sql  # Sjabloon voor e-mailverificatie (invite eruit + RLS-grendel + beheer)
+├── supabase-reorder.sql    # Functies reorder_items/reorder_lists: volgorde in één request (§7.3)
 ├── public/                 # PWA-assets: manifest.webmanifest, sw.js, icons/, favicon.svg
 ├── .github/workflows/      # CI: deploy naar GitHub Pages (deploy-pages.yml)
 ├── scripts/
@@ -170,7 +171,7 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 
 ### 7.2 Database types
 
-- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
+- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties, en de functies `reorder_items`/`reorder_lists` uit `supabase-reorder.sql`). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
 - Het uitnodigingssysteem (`invites`, `invite_claims`, `claim_invite`) is **verwijderd**; die types bestaan niet meer.
 - Domeinmodellen (`List`, `ListItem`) in `src/types/app.ts` — gescheiden van DB-shape waar zinvol.
 
@@ -185,6 +186,7 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 - **Samenvoegen vóór het versturen** (`compactOutbox` in `lib/outbox.ts`, aangeroepen aan het begin van `flushOutbox`): item aangemaakt en daarna gewijzigd → één `item.create` met de eindstand; meerdere updates van één item → alleen de laatste; aangemaakt en weer verwijderd → beide weg; lijst aangemaakt en hernoemd → één `list.create`; meerdere reorders van één lijst (of van de lijstvolgorde) → alleen de laatste, op de plek van de laatste. **Alleen nog nooit geprobeerde operaties** worden samengevoegd of geschrapt: een gefaalde operatie kan na een timeout tóch op de server zijn aangekomen en blijft ongemoeid. De samengevoegde wachtrij wordt meteen opgeslagen.
 - **Gebundelde requests** (`nextBatch` in `lib/outbox.ts`, FIFO blijft gelden): opeenvolgende `item.create` gaan als één insert met alle rijen, opeenvolgende `item.delete` van dezelfde lijst als één `delete().in("id", ids).eq("list_id", …)` — altijd met id-filter, dus nooit een bulk-wipe. Hooguit `MAX_BATCH_SIZE` (100) per bundel; al het andere gaat alleen. Een operatie die de **server** weigerde (duplicaat, geen toegang, onbekend) gaat voortaan alleen; na een netwerkfout of timeout mag hij weer mee in een bundel. Mislukt een bundel, dan worden al zijn operaties gemarkeerd en opnieuw geprobeerd met backoff.
 - **Item toevoegen herschikt de lijst niet.** Het nieuwe item komt bovenaan met positie `bovenste positie − 1` (negatief mag; server en pull sorteren op `position`), dus alleen een `item.create` en geen `item.reorder`. Slepen nummert de lijst wel opnieuw door.
+- **Volgorde opslaan in één request:** `item.reorder` en `list.reorder` roepen de databasefuncties `reorder_items` / `reorder_lists` aan (`supabase-reorder.sql`, `security invoker`: de RLS-regels gelden onverkort). Eén statement, dus alles of niets — een verbroken verbinding laat geen half opgeslagen volgorde meer achter. Bestaan de functies (nog) niet (`PGRST202`/`42883`), dan valt de app terug op één update per item en onthoudt dat per client. Een échte fout van de functie valt **niet** terug, maar wordt gemarkeerd en opnieuw geprobeerd.
 
 ### 7.4 Sync-indicator (vereist)
 

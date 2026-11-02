@@ -239,6 +239,42 @@ async function guarded(
   }
 }
 
+type RawError = { message: string; code?: string } | null;
+
+/**
+ * Per client: bestaan de reorder-functies uit `supabase-reorder.sql`? `false`
+ * zodra de server meldt dat ze er niet zijn; dan direct de terugval, zonder
+ * eerst elke keer een mislukte aanroep. Per client (niet globaal), zodat een
+ * andere client — bv. in de tests — opnieuw kijkt.
+ */
+const rpcAvailable = new WeakMap<object, boolean>();
+
+/** De server kent de functie niet (nog niet uitgevoerd in Supabase). */
+function isMissingFunction(error: RawError): boolean {
+  return error?.code === "PGRST202" || error?.code === "42883";
+}
+
+/**
+ * Volgorde opslaan via de databasefunctie: één request, alles of niets
+ * (§7.3). Bestaat de functie (nog) niet, dan de oude manier: één update per
+ * item. Zo werkt de app vóór én na het uitvoeren van het script.
+ */
+async function reorderViaRpc(
+  client: SupabaseClient<Database>,
+  viaRpc: () => PromiseLike<{ error: RawError }>,
+  perRow: () => Promise<RawError>,
+): Promise<RawError> {
+  if (rpcAvailable.get(client) !== false) {
+    const { error } = await viaRpc();
+    if (!isMissingFunction(error)) {
+      rpcAvailable.set(client, true);
+      return error;
+    }
+    rpcAvailable.set(client, false);
+  }
+  return perRow();
+}
+
 /** Voert één outbox-entry uit; geeft de raw Supabase-fout terug (of null). */
 async function applyToClient(
   entry: OutboxEntry,
@@ -308,27 +344,43 @@ async function applyToClient(
       break;
     }
     case "list.reorder": {
-      const updates = entry.listIds.map((listId, position) =>
-        client
-          .from("lists")
-          .update({ position })
-          .eq("id", listId)
-          .eq("owner_id", userId),
+      error = await reorderViaRpc(
+        client,
+        () => client.rpc("reorder_lists", { p_list_ids: entry.listIds }),
+        async () => {
+          const updates = entry.listIds.map((listId, position) =>
+            client
+              .from("lists")
+              .update({ position })
+              .eq("id", listId)
+              .eq("owner_id", userId),
+          );
+          const results = await Promise.all(updates);
+          return results.find((r) => r.error)?.error ?? null;
+        },
       );
-      const results = await Promise.all(updates);
-      error = results.find((r) => r.error)?.error ?? null;
       break;
     }
     case "item.reorder": {
-      const updates = entry.itemIds.map((itemId, position) =>
-        client
-          .from("list_items")
-          .update({ position })
-          .eq("id", itemId)
-          .eq("list_id", entry.listId),
+      error = await reorderViaRpc(
+        client,
+        () =>
+          client.rpc("reorder_items", {
+            p_list_id: entry.listId,
+            p_item_ids: entry.itemIds,
+          }),
+        async () => {
+          const updates = entry.itemIds.map((itemId, position) =>
+            client
+              .from("list_items")
+              .update({ position })
+              .eq("id", itemId)
+              .eq("list_id", entry.listId),
+          );
+          const results = await Promise.all(updates);
+          return results.find((r) => r.error)?.error ?? null;
+        },
       );
-      const results = await Promise.all(updates);
-      error = results.find((r) => r.error)?.error ?? null;
       break;
     }
   }

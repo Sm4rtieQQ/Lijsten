@@ -94,7 +94,7 @@
 
 ## V4 — Volgorde opslaan in één request (databasefunctie)
 
-- [ ] **V4.1** Nieuw `supabase-reorder.sql` (idempotent):
+- [x] **V4.1** Nieuw `supabase-reorder.sql` (idempotent):
       `reorder_items(p_list_id uuid, p_item_ids uuid[])` en
       `reorder_lists(p_list_ids uuid[])`, beide `language sql`,
       **`security invoker`** (de bestaande RLS-regels gelden: eigen lijsten,
@@ -104,12 +104,12 @@ unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
       `reorder_lists` filtert ook expliciet op `owner_id = auth.uid()` (§7.1).
 - [ ] **V4.2** **Uitvoeren in de SQL Editor van Supabase — door de gebruiker**
       (kan niet vanuit de repo), daarna testen met een eigen account.
-- [ ] **V4.3** `sync.ts`: `item.reorder`/`list.reorder` via `client.rpc(…)`.
+- [x] **V4.3** `sync.ts`: `item.reorder`/`list.reorder` via `client.rpc(…)`.
       Bestaat de functie nog niet (PostgREST `PGRST202`/404), dan terugvallen op
       de huidige per-item-updates. Zo werkt de app vóór én na het script.
-- [ ] **V4.4** `database.types.ts`: `Functions` voor beide functies.
-- [ ] **V4.5** Tests + `verify:data`: rpc-pad, terugval, fout → NL-tekst.
-- [ ] Commit + AGENTS.md (§7.3, projectstructuur met `supabase-reorder.sql`).
+- [x] **V4.4** `database.types.ts`: `Functions` voor beide functies.
+- [x] **V4.5** Tests + `verify:data`: rpc-pad, terugval, fout → NL-tekst.
+- [x] Commit + AGENTS.md (§7.3, projectstructuur met `supabase-reorder.sql`).
 
 ## Gevolgen (bewust)
 
