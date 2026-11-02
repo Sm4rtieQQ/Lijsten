@@ -16,7 +16,11 @@ import {
 } from "./composables/useBackNavigation";
 import { initDeepLink, useDeepLink } from "./composables/useDeepLink";
 import { useLists } from "./composables/useLists";
-import { bindSyncUser } from "./composables/useSync";
+import {
+  bindSyncUser,
+  flushNow,
+  syncWithServerIfStale,
+} from "./composables/useSync";
 
 const {
   user,
@@ -27,7 +31,7 @@ const {
   init,
   setJustVerified,
 } = useAuth();
-const { activeListId, hydrate, reset, refreshData } = useLists();
+const { activeListId, hydrate, reset } = useLists();
 
 // Registratie is een eigen scherm naast het inlogscherm (AGENTS.md §8.9).
 const registerOpen = ref(false);
@@ -155,16 +159,22 @@ watch(
   { immediate: true },
 );
 
-// Sinds de "Verversen"-knop is vervangen door de sync-pill: wanneer de gebruiker
-// terugkomt op het tabblad wordt de cloud alsnog ingehaald (debounced).
+// Wisselen van app/tabblad (§7.3/§7.4):
+// - naar de achtergrond: wachtende wijzigingen meteen versturen (best effort;
+//   de outbox staat lokaal en gaat anders bij de volgende start mee);
+// - terug: de cloud inhalen (debounced), hooguit één keer per 30 s.
 let pullTimer: ReturnType<typeof setTimeout> | null = null;
 
 function onVisibilityChange(): void {
-  if (!user.value || document.visibilityState !== "visible") return;
+  if (!user.value) return;
+  if (document.visibilityState === "hidden") {
+    void flushNow();
+    return;
+  }
   if (pullTimer) clearTimeout(pullTimer);
   pullTimer = setTimeout(() => {
     pullTimer = null;
-    void refreshData();
+    void syncWithServerIfStale();
   }, 800);
 }
 

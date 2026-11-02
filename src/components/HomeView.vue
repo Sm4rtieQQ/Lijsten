@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 
+import { useArmedConfirm } from "../composables/useArmedConfirm";
 import { useAuth } from "../composables/useAuth";
+import { flushBeforeSignOut } from "../composables/useSync";
 import { registerBackHandler } from "../composables/useBackNavigation";
 import { useDragReorder } from "../composables/useDragReorder";
 import { useLists } from "../composables/useLists";
@@ -104,9 +113,40 @@ function onConfirmDelete(): void {
   deleteTarget.value = null;
 }
 
-async function onLogout(): Promise<void> {
+// --- Uitloggen (§7.3): uitloggen wist de outbox, dus eerst alles versturen. ---
+// Blijven er wijzigingen achter (offline of fout), dan wordt de knop gewapend
+// met de twee-staps bevestiging van §8.6; pas de tweede klik logt uit.
+const LOGOUT_KEY = "logout";
+const loggingOut = ref(false);
+const {
+  arm: armLogout,
+  disarm: disarmLogout,
+  isArmed: isLogoutArmed,
+  dispose: disposeLogoutConfirm,
+} = useArmedConfirm(() => void doSignOut());
+onBeforeUnmount(disposeLogoutConfirm);
+
+// Menu dicht → bevestiging vervalt.
+watch(accountOpen, (open) => {
+  if (!open) disarmLogout();
+});
+
+async function doSignOut(): Promise<void> {
   accountOpen.value = false;
   await signOut();
+}
+
+async function onLogout(): Promise<void> {
+  if (loggingOut.value) return;
+  if (isLogoutArmed(LOGOUT_KEY)) {
+    armLogout(LOGOUT_KEY); // tweede klik: toch uitloggen
+    return;
+  }
+  loggingOut.value = true;
+  const safe = await flushBeforeSignOut();
+  loggingOut.value = false;
+  if (safe) await doSignOut();
+  else armLogout(LOGOUT_KEY);
 }
 
 // --- Slepen (lijsten herschikken, §8.15): pointer-events + zwevende kopie ---
@@ -171,12 +211,34 @@ const ghostStyle = computed(() =>
             </button>
             <p class="eyebrow panel-header">Account</p>
             <span class="current-user-email">{{ user?.email }}</span>
+            <p
+              v-if="isLogoutArmed(LOGOUT_KEY)"
+              class="panel-note"
+              role="status"
+            >
+              Niet alle wijzigingen zijn verstuurd. Ze gaan verloren als je nu
+              uitlogt.
+            </p>
             <button
               class="panel-action panel-logout"
+              :class="{ 'is-armed': isLogoutArmed(LOGOUT_KEY) }"
               type="button"
+              :disabled="loggingOut"
+              :aria-pressed="isLogoutArmed(LOGOUT_KEY) ? 'true' : 'false'"
+              :aria-label="
+                isLogoutArmed(LOGOUT_KEY)
+                  ? 'Bevestigen: toch uitloggen, niet-verstuurde wijzigingen gaan verloren'
+                  : undefined
+              "
               @click="onLogout"
             >
-              Uitloggen
+              {{
+                loggingOut
+                  ? "Versturen…"
+                  : isLogoutArmed(LOGOUT_KEY)
+                    ? "Toch uitloggen"
+                    : "Uitloggen"
+              }}
             </button>
           </div>
         </div>

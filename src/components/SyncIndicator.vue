@@ -35,7 +35,7 @@ onBeforeUnmount(() => clearTimeout(collapseTimer));
 
 const labels: Record<SyncStatus, string> = {
   synced: "Gesynchroniseerd",
-  pending: "In wachtrijst",
+  pending: "In wachtrij",
   syncing: "Synchroniseren…",
   error: "Fout bij synchroniseren",
 };

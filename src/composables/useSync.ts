@@ -43,8 +43,19 @@ const lastSyncedAt: Ref<string | null> = ref(null);
 const lastError: Ref<string | null> = ref(null);
 const queueLength: Ref<number> = ref(0);
 
+/** Zo lang na de laatste wijziging wordt de outbox verstuurd (§7.3). */
+export const FLUSH_DEBOUNCE_MS = 30_000;
+/** Uiterlijk zo lang na de eerste nog niet verstuurde wijziging (§7.3). */
+export const MAX_FLUSH_WAIT_MS = 120_000;
+/** De automatische pull bij terugkeren hooguit één keer per… (§7.4). */
+export const AUTO_PULL_MIN_INTERVAL_MS = 30_000;
+
 let boundUser: string | null = null;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
+/** Tijdstip van de eerste wijziging die nog op verzending wacht. */
+let firstPendingAt: number | null = null;
+/** Start van de laatste volledige sync (voor de pull-begrenzing). */
+let lastFullSyncStartedAt: number | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let flushing = false;
 let pulling = false;
@@ -94,10 +105,8 @@ export function bindSyncUser(userId: string | null): void {
   boundUser = userId;
   // Leg 'offline' ook bij koud starten vast (het offline-event was dan al voorbij).
   offlineMode = typeof navigator !== "undefined" && navigator.onLine === false;
-  if (syncTimer) {
-    clearTimeout(syncTimer);
-    syncTimer = null;
-  }
+  cancelScheduledFlush();
+  lastFullSyncStartedAt = null;
   if (retryTimer) {
     clearTimeout(retryTimer);
     retryTimer = null;
@@ -146,12 +155,64 @@ export function markDirty(): void {
   scheduleFlush();
 }
 
-function scheduleFlush(delay = 700): void {
+/**
+ * Versturen 30 s na de laatste wijziging (§7.3): elke wijziging start de timer
+ * opnieuw, zodat een reeks wijzigingen samen vertrekt. Bij doorlopend bewerken
+ * wordt er uiterlijk 2 min na de eerste nog niet verstuurde wijziging gestuurd.
+ */
+function scheduleFlush(): void {
+  const now = Date.now();
+  if (firstPendingAt === null) firstPendingAt = now;
+  const untilMaxWait = firstPendingAt + MAX_FLUSH_WAIT_MS - now;
+  const delay = Math.max(0, Math.min(FLUSH_DEBOUNCE_MS, untilMaxWait));
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     syncTimer = null;
     void runFlush();
   }, delay);
+}
+
+/** Een geplande verzending vervalt (er wordt nu meteen verstuurd). */
+function cancelScheduledFlush(): void {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = null;
+  firstPendingAt = null;
+}
+
+/**
+ * Nu meteen versturen, zonder de wachttijd af te wachten (app naar de
+ * achtergrond, `online`). Alleen pushen, geen pull.
+ */
+export function flushNow(): Promise<boolean> {
+  return runFlush();
+}
+
+/**
+ * Vóór het uitloggen alles versturen: uitloggen wist de outbox (§7.1). `true`
+ * = er staat niets meer in de wachtrij en uitloggen is veilig; `false` = er
+ * blijven wijzigingen achter (offline of fout) — de UI vraagt dan bevestiging.
+ */
+export async function flushBeforeSignOut(): Promise<boolean> {
+  const userId = boundUser;
+  if (!userId) return true;
+  if (loadQueue(userId, browserStorage).length === 0) return true;
+  await runFlush();
+  return loadQueue(userId, browserStorage).length === 0;
+}
+
+/**
+ * De automatische pull bij terugkeren naar de app/het tabblad: hooguit één
+ * keer per 30 s (gerekend vanaf de vorige volledige sync, ook een handmatige).
+ * De pill en de swipe gebruiken `syncWithServer` en zijn niet begrensd.
+ */
+export function syncWithServerIfStale(): Promise<void> {
+  if (
+    lastFullSyncStartedAt !== null &&
+    Date.now() - lastFullSyncStartedAt < AUTO_PULL_MIN_INTERVAL_MS
+  ) {
+    return Promise.resolve();
+  }
+  return syncWithServer();
 }
 
 /**
@@ -169,6 +230,9 @@ function runFlush(): Promise<boolean> {
 
 async function doFlush(): Promise<boolean> {
   if (!boundUser || !supabase) return false;
+  // Deze flush neemt alles mee wat nu in de outbox staat; een geplande
+  // verzending is dan overbodig. Wijzigingen tijdens de flush plannen opnieuw.
+  cancelScheduledFlush();
   // Offline bekend (DevTools-'Offline', vliegtuigmodus, écht geen netwerk):
   // niet eens proberen te flushen — meteen 'error'. Een hangende request kan
   // hierdoor nooit meer de spinner blokkeren (D6-fix); het 'online'-event
@@ -239,6 +303,7 @@ export function syncWithServer(): Promise<void> {
 async function doSync(): Promise<void> {
   const userId = boundUser;
   if (!userId || !supabase) return;
+  lastFullSyncStartedAt = Date.now();
   pullError = null;
 
   const flushed = await runFlush();

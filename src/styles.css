@@ -1335,3 +1335,25 @@ body {
     transform: none;
   }
 }
+
+/* ---------- Fase 9: uitloggen met niet-verstuurde wijzigingen (§7.3) ---------- */
+/* Gewapend volgens §8.6: oranje met witte tekst, zichtbaar zonder hover. */
+.panel-logout.is-armed,
+.panel-logout.is-armed:hover {
+  color: #fff;
+  background: var(--orange);
+  font-weight: 700;
+}
+.panel-logout.is-armed:hover {
+  background: var(--orange-dark);
+}
+.panel-logout:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.panel-note {
+  margin: 4px 8px 0;
+  color: var(--orange-dark);
+  font-size: 10px;
+  line-height: 1.4;
+}

@@ -2,7 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shallowMount, type VueWrapper } from "@vue/test-utils";
 import { nextTick, ref } from "vue";
 
-const { auth, lists, mockBindSyncUser, backFallback } = vi.hoisted(() => ({
+const {
+  auth,
+  lists,
+  mockBindSyncUser,
+  mockFlushNow,
+  mockSyncIfStale,
+  backFallback,
+} = vi.hoisted(() => ({
+  mockFlushNow: vi.fn(() => Promise.resolve(true)),
+  mockSyncIfStale: vi.fn(() => Promise.resolve()),
   auth: {} as Record<string, unknown>,
   lists: {} as Record<string, unknown>,
   mockBindSyncUser: vi.fn(),
@@ -19,7 +28,11 @@ vi.mock("./composables/useBackNavigation", () => ({
 
 vi.mock("./composables/useAuth", () => ({ useAuth: () => auth }));
 vi.mock("./composables/useLists", () => ({ useLists: () => lists }));
-vi.mock("./composables/useSync", () => ({ bindSyncUser: mockBindSyncUser }));
+vi.mock("./composables/useSync", () => ({
+  bindSyncUser: mockBindSyncUser,
+  flushNow: mockFlushNow,
+  syncWithServerIfStale: mockSyncIfStale,
+}));
 vi.mock("./composables/useDeepLink", () => ({
   useDeepLink: () => ({}),
   initDeepLink: vi.fn(),
@@ -127,5 +140,41 @@ describe("App — terugknop op de auth-schermen (AGENTS.md §8.13)", () => {
     user.value = { id: "a" };
     await nextTick();
     expect(back()).toBe(false);
+  });
+});
+
+describe("App — wisselen van app/tabblad (AGENTS.md §7.3/§7.4)", () => {
+  let wrapper: VueWrapper | undefined;
+  afterEach(() => {
+    wrapper?.unmount();
+    vi.useRealTimers();
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+  });
+
+  function setVisibility(value: "visible" | "hidden"): void {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  it("naar de achtergrond → meteen versturen; terug → (begrensde) pull", async () => {
+    vi.useFakeTimers();
+    mockFlushNow.mockClear();
+    mockSyncIfStale.mockClear();
+    wrapper = shallowMount(App);
+    user.value = { id: "a" };
+    await nextTick();
+
+    setVisibility("hidden");
+    expect(mockFlushNow).toHaveBeenCalledOnce();
+
+    setVisibility("visible");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockSyncIfStale).toHaveBeenCalledOnce();
   });
 });

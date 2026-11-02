@@ -27,10 +27,16 @@ vi.mock("../lib/supabase", () => ({
 }));
 
 import {
+  AUTO_PULL_MIN_INTERVAL_MS,
+  FLUSH_DEBOUNCE_MS,
+  MAX_FLUSH_WAIT_MS,
   bindSyncUser,
+  flushBeforeSignOut,
+  flushNow,
   markDirty,
   registerPuller,
   syncWithServer,
+  syncWithServerIfStale,
   useSync,
 } from "./useSync";
 
@@ -191,5 +197,148 @@ describe("useSync — volledige sync: pushen en dan binnenhalen (AGENTS.md §7.4
     await syncNow();
     expect(mockFlushOutbox).toHaveBeenCalledOnce();
     expect(puller).toHaveBeenCalledOnce();
+  });
+});
+
+describe("useSync — versturen 30 s na de laatste wijziging (AGENTS.md §7.3)", () => {
+  const pendingOp = [{ opId: "op-1", attempts: 0, lastError: null }];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setOnline(true);
+    mockFlushOutbox.mockReset();
+    mockLoadQueue.mockReset();
+    mockLoadSyncMeta.mockReset();
+    mockLoadSyncMeta.mockReturnValue({ lastSyncedAt: null });
+    mockLoadQueue.mockReturnValue(pendingOp);
+    mockFlushOutbox.mockImplementation(async () => {
+      mockLoadQueue.mockReturnValue([]);
+      return { ok: true, queue: [], error: null };
+    });
+    bindSyncUser("user-1");
+  });
+
+  afterEach(() => {
+    bindSyncUser(null);
+    vi.useRealTimers();
+  });
+
+  it("wacht 30 s na de laatste wijziging; de pill staat zolang op In wachtrij", async () => {
+    markDirty();
+    expect(status.value).toBe("pending");
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DEBOUNCE_MS - 1);
+    expect(mockFlushOutbox).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+    expect(status.value).toBe("synced");
+  });
+
+  it("elke wijziging start de timer opnieuw: een reeks gaat samen in één keer", async () => {
+    for (let i = 0; i < 5; i += 1) {
+      markDirty();
+      await vi.advanceTimersByTimeAsync(10_000);
+    }
+    expect(mockFlushOutbox).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(FLUSH_DEBOUNCE_MS);
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+  });
+
+  it("bij doorlopend bewerken toch uiterlijk na 2 minuten", async () => {
+    for (let elapsed = 0; elapsed < MAX_FLUSH_WAIT_MS; elapsed += 20_000) {
+      markDirty();
+      await vi.advanceTimersByTimeAsync(20_000);
+    }
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+  });
+
+  it("flushNow verstuurt meteen en de geplande verzending vervalt", async () => {
+    markDirty();
+    await flushNow();
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(FLUSH_DEBOUNCE_MS);
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+  });
+
+  it("de pill (volledige sync) verstuurt meteen", async () => {
+    markDirty();
+    await syncNow();
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+  });
+});
+
+describe("useSync — vóór het uitloggen (AGENTS.md §7.3)", () => {
+  beforeEach(() => {
+    setOnline(true);
+    mockFlushOutbox.mockReset();
+    mockLoadQueue.mockReset();
+    mockLoadSyncMeta.mockReturnValue({ lastSyncedAt: null });
+    mockLoadQueue.mockReturnValue([]);
+    bindSyncUser("user-1");
+  });
+  afterEach(() => bindSyncUser(null));
+
+  it("lege outbox → veilig, zonder te versturen", async () => {
+    await expect(flushBeforeSignOut()).resolves.toBe(true);
+    expect(mockFlushOutbox).not.toHaveBeenCalled();
+  });
+
+  it("wachtende wijzigingen die lukken → veilig", async () => {
+    mockLoadQueue.mockReturnValue([
+      { opId: "op-1", attempts: 0, lastError: null },
+    ]);
+    mockFlushOutbox.mockImplementation(async () => {
+      mockLoadQueue.mockReturnValue([]);
+      return { ok: true, queue: [], error: null };
+    });
+    await expect(flushBeforeSignOut()).resolves.toBe(true);
+  });
+
+  it("versturen mislukt (offline) → niet veilig, de UI vraagt bevestiging", async () => {
+    mockLoadQueue.mockReturnValue([
+      { opId: "op-1", attempts: 0, lastError: null },
+    ]);
+    setOnline(false);
+    await expect(flushBeforeSignOut()).resolves.toBe(false);
+  });
+});
+
+describe("useSync — automatische pull hooguit één keer per 30 s (AGENTS.md §7.4)", () => {
+  const puller = vi.fn<() => Promise<string | null>>();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setOnline(true);
+    mockFlushOutbox.mockReset();
+    mockLoadQueue.mockReset();
+    mockLoadQueue.mockReturnValue([]);
+    mockLoadSyncMeta.mockReturnValue({ lastSyncedAt: null });
+    mockFlushOutbox.mockResolvedValue({ ok: true, queue: [], error: null });
+    puller.mockReset();
+    puller.mockResolvedValue(null);
+    registerPuller(puller);
+    bindSyncUser("user-1");
+  });
+  afterEach(() => {
+    registerPuller(null);
+    bindSyncUser(null);
+    vi.useRealTimers();
+  });
+
+  it("slaat over binnen 30 s na de vorige sync, ook na een handmatige", async () => {
+    await syncWithServer(); // bv. de pill of het opstarten
+    await syncWithServerIfStale();
+    expect(puller).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(AUTO_PULL_MIN_INTERVAL_MS);
+    await syncWithServerIfStale();
+    expect(puller).toHaveBeenCalledTimes(2);
+  });
+
+  it("de pill is niet begrensd", async () => {
+    await syncWithServer();
+    await syncNow();
+    expect(puller).toHaveBeenCalledTimes(2);
   });
 });

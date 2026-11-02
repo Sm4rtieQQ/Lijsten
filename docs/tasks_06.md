@@ -33,26 +33,27 @@
 
 ## V1 — Versturen 30 s na de laatste wijziging
 
-- [ ] **V1.1** `useSync`: elke mutatie (`markDirty`) start de timer opnieuw;
+- [x] **V1.1** `useSync`: elke mutatie (`markDirty`) start de timer opnieuw;
       pas na **30 s** zonder wijziging `runFlush()`. Maximaal **2 min** na de
       eerste nog niet verstuurde wijziging wordt er toch verstuurd.
-- [ ] **V1.2** Direct versturen (timer vervalt): pill-klik en swipe
+- [x] **V1.2** Direct versturen (timer vervalt): pill-klik en swipe
       (`syncWithServer`), `online`-event, en de app naar de achtergrond
       (`visibilitychange` → `hidden`, best effort; de outbox staat lokaal en gaat
       anders bij de volgende start mee).
-- [ ] **V1.3** **Uitloggen:** eerst `syncWithServer()`. Lukt dat niet (outbox
+- [x] **V1.3** **Uitloggen:** eerst `syncWithServer()`. Lukt dat niet (outbox
       niet leeg), dan wordt de `Uitloggen`-knop gewapend met de twee-staps
       bevestiging van §8.6 (`useArmedConfirm`): `Toch uitloggen` met een
       `aria-label` dat niet-verstuurde wijzigingen verloren gaan. Pas de tweede
       klik logt uit. Geen technische termen.
-- [ ] **V1.4** Automatische pull bij terugkeren (`App.vue`, `visibilitychange`)
+      _Extra: het label van de pill was `In wachtrijst` (typfout); nu `In wachtrij`._
+- [x] **V1.4** Automatische pull bij terugkeren (`App.vue`, `visibilitychange`)
       hooguit één keer per 30 s; pill en swipe zijn niet begrensd.
-- [ ] **V1.5** Retry/backoff na een mislukte poging blijft ongewijzigd.
+- [x] **V1.5** Retry/backoff na een mislukte poging blijft ongewijzigd.
 - [ ] **V1.6** Tests (fake timers): timer start opnieuw bij elke wijziging,
       maximum van 2 min, directe triggers, uitloggen met en zonder lege outbox,
       pull-begrenzing. Handmatig: tien items toevoegen → pill 30 s amber → één
-      sync.
-- [ ] Commit + AGENTS.md §7.3/§7.4 (wachttijd, pill-status, uitloggen).
+      sync. _Tests af (useSync, App, HomeView.logout); handmatige check nog door de gebruiker._
+- [x] Commit + AGENTS.md §7.3/§7.4 (wachttijd, pill-status, uitloggen).
 
 ## V2 — Wachtende wijzigingen samenvoegen
 
@@ -96,7 +97,7 @@
       `reorder_lists(p_list_ids uuid[])`, beide `language sql`,
       **`security invoker`** (de bestaande RLS-regels gelden: eigen lijsten,
       bevestigd e-mailadres), `set search_path = public`; één `UPDATE … FROM
-    unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
+  unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
       `public`/`anon`, `grant execute` aan `authenticated`.
       `reorder_lists` filtert ook expliciet op `owner_id = auth.uid()` (§7.1).
 - [ ] **V4.2** **Uitvoeren in de SQL Editor van Supabase — door de gebruiker**
