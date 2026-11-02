@@ -96,3 +96,5 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 - [x] **Fase H — Android 1.2 + APK (gated):** `versionName "1.2"` + `versionCode 2` in `android/app/build.gradle` **én** `package.json` `1.2.0` (+ lockfile); build + `npm run android:sync`; expliciete goedkeuring gebruiker voor `assembleDebug` (signing-keuze: **debug-APK**); APK gebouwd met `JAVA_HOME=/opt/android-studio-for-platform/jbr` (JDK 21 — de systeemjava 25 is te nieuw voor Gradle 8.14/AGP 8.13) en geverifieerd met `apksigner verify --print-certs` → `CN=Android Debug`. Artefact: `android/app/build/outputs/apk/debug/app-debug.apk` (4,0 MB, niet in repo)
 
 - [ ] Fase 6 — Open registratie + e-mailverificatie: zie [tasks_03.md](tasks_03.md).
+
+- [ ] Fase 7 — Refactor (gedrag ongewijzigd): zie [tasks_04.md](tasks_04.md).

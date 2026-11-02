@@ -59,7 +59,9 @@ Lijsten/
 ├── docs/
 │   ├── tasks.md            # Voortgang per fase (verwijst naar het actieve plan)
 │   ├── task_02.md          # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
-│   └── tasks_03.md         # Actief plan: open registratie + e-mailverificatie
+│   ├── tasks_03.md         # Actief plan: open registratie + e-mailverificatie
+│   └── tasks_04.md         # Refactor (gedrag ongewijzigd)
+├── .gitattributes          # eol=lf, zodat Prettier ook op Windows schoon is
 ├── index.html              # Vite entry (fonts + PWA-/iOS-meta)
 ├── package.json
 ├── capacitor.config.json   # webDir: dist
@@ -79,6 +81,9 @@ Lijsten/
 │   ├── styles.css          # Geïmporteerd in main.ts — alle styling
 │   ├── env.d.ts            # TypeScript env types
 │   ├── components/
+│   │   ├── AuthCard.vue          # Gedeelde kaart van de auth-schermen
+│   │   ├── PasswordInput.vue     # Wachtwoordveld met oog-toggle
+│   │   ├── icons/                # Gedeelde SVG-iconen (sleephandvat, prullenbak)
 │   │   ├── SplashView.vue        # Laadscherm (staat bij het opstarten)
 │   │   ├── LoginView.vue         # Inloggen + knop Registreren
 │   │   ├── RegisterView.vue      # Open registratie (zonder token)
@@ -102,6 +107,9 @@ Lijsten/
 │       ├── supabase.ts
 │       ├── database.types.ts   # Centrale Supabase Database types (lists, list_items)
 │       ├── urlParams.ts        # Pure URL-parser voor deep links (§8.11)
+│       ├── platform.ts         # Native-detectie + redirect-doel van de mails
+│       ├── validation.ts       # Wachtwoord-/e-mailvalidatie (één bron)
+│       ├── outbox.ts           # Pure outbox-helpers (entry, prune, retry)
 │       ├── storage.ts          # Per-user storage + outbox
 │       ├── sync.ts             # Offline-first sync logica
 │       ├── errorMessages.ts    # Fout -> leesbare NL-tekst (§7.5)
