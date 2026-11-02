@@ -1,6 +1,6 @@
 import { ref, type Ref } from "vue";
 
-import { createId } from "../lib/utils";
+import { createOutboxEntry, pruneQueueForList } from "../lib/outbox";
 import {
   loadLists,
   saveLists,
@@ -11,11 +11,7 @@ import {
 } from "../lib/storage";
 import { flushOutbox, pullListsFromServer } from "../lib/sync";
 import { supabase } from "../lib/supabase";
-import {
-  hasFailed,
-  type OutboxEntry,
-  type OutboxOpPayload,
-} from "../types/sync";
+import type { OutboxOpPayload } from "../types/sync";
 import {
   createList,
   createListItem,
@@ -39,31 +35,29 @@ import { markDirty } from "./useSync";
 const lists: Ref<List[]> = ref([]);
 const activeListId: Ref<string | null> = ref(null);
 const hydrateToken: Ref<number> = ref(0);
+/** De gebruiker van wie de state nu geladen is; `null` = niemand (geen mutaties). */
 let boundUser: string | null = null;
 
-function requireUser(): string | null {
-  return boundUser;
-}
-
 function enqueue(op: OutboxOpPayload): void {
-  const user = requireUser();
+  const user = boundUser;
   if (!user) return;
-  const entry: OutboxEntry = {
-    ...op,
-    opId: createId(),
-    createdAt: new Date().toISOString(),
-    attempts: 0,
-    lastError: null,
-  };
   const queue = loadQueue(user, browserStorage);
-  queue.push(entry);
+  queue.push(createOutboxEntry(op));
   saveQueue(user, queue, browserStorage);
   markDirty();
 }
 
 function persistLists(): void {
-  const user = requireUser();
-  if (user) saveLists(user, lists.value, browserStorage);
+  if (boundUser) saveLists(boundUser, lists.value, browserStorage);
+}
+
+/** Vervangt de items van één lijst (immutable, voor reactiviteit). */
+function setItems(listId: string, items: ListItem[]): void {
+  lists.value = lists.value.map((l) => (l.id === listId ? { ...l, items } : l));
+}
+
+function findList(listId: string): List | undefined {
+  return lists.value.find((l) => l.id === listId);
 }
 
 /** Offline-first hydrate: cache laden → eigen outbox leegmaken → server pullen. */
@@ -117,15 +111,19 @@ function reset(): void {
 }
 
 function currentList(): List | undefined {
-  return lists.value.find((list) => list.id === activeListId.value);
+  return activeListId.value ? findList(activeListId.value) : undefined;
+}
+
+/** De lijst waarin item `itemId` staat. */
+function findOwner(itemId: string): List | undefined {
+  return lists.value.find((l) => l.items.some((i) => i.id === itemId));
 }
 
 // --- Mutaties (enqueueen in de outbox + lokale cache bijwerken) ---
 
 function createNewList(title: string): string {
-  const user = requireUser();
   const list = createList(title.trim() || "Nieuw lijstje");
-  if (user) {
+  if (boundUser) {
     lists.value = [list, ...lists.value];
     persistLists();
     enqueue({ type: "list.create", listId: list.id, title: list.title });
@@ -134,9 +132,8 @@ function createNewList(title: string): string {
 }
 
 function renameList(listId: string, title: string): void {
-  const user = requireUser();
   const clean = title.trim();
-  if (!user || !clean) return;
+  if (!boundUser || !clean) return;
   lists.value = lists.value.map((list) =>
     list.id === listId ? { ...list, title: clean } : list,
   );
@@ -145,25 +142,13 @@ function renameList(listId: string, title: string): void {
 }
 
 function deleteList(listId: string): void {
-  const user = requireUser();
+  const user = boundUser;
   if (!user) return;
-  // Prune outbox: operaties van deze lijst vervallen (anders FK-fouten of nét
-  // herschapen items na verwijderen van de lijst).
-  const queue = loadQueue(user, browserStorage).filter((entry) => {
-    switch (entry.type) {
-      case "item.create":
-      case "item.update":
-        return entry.item.listId !== listId;
-      case "item.delete":
-      case "item.reorder":
-        return entry.listId !== listId;
-      case "list.reorder":
-        return !entry.listIds.includes(listId);
-      default:
-        return entry.listId !== listId;
-    }
-  });
-  saveQueue(user, queue, browserStorage);
+  saveQueue(
+    user,
+    pruneQueueForList(loadQueue(user, browserStorage), listId),
+    browserStorage,
+  );
   enqueue({ type: "list.delete", listId });
 
   lists.value = lists.value.filter((list) => list.id !== listId);
@@ -172,11 +157,9 @@ function deleteList(listId: string): void {
 }
 
 function addItem(listId: string, text: string): void {
-  const user = requireUser();
   const clean = text.trim();
-  if (!user || !clean) return;
-  const list = lists.value.find((l) => l.id === listId);
-  if (!list) return;
+  const list = findList(listId);
+  if (!boundUser || !clean || !list) return;
 
   const item: ListItem = createListItem({ listId, text: clean });
   // Nieuwste bovenaan (zoals de oude app); posities opnieuw laten
@@ -186,33 +169,24 @@ function addItem(listId: string, text: string): void {
     position: index,
   }));
 
-  lists.value = lists.value.map((l) => (l.id === listId ? { ...l, items } : l));
+  setItems(listId, items);
   persistLists();
   enqueue({ type: "item.create", item: { ...item, position: 0 } });
-  enqueue({
-    type: "item.reorder",
-    listId,
-    itemIds: items.map((i) => i.id),
-  });
+  enqueue({ type: "item.reorder", listId, itemIds: items.map((i) => i.id) });
 }
 
 function updateItem(
   itemId: string,
   updater: (item: ListItem) => ListItem,
 ): void {
-  const user = requireUser();
-  if (!user) return;
-  let updated: ListItem | undefined;
-  lists.value = lists.value.map((list) => {
-    const found = list.items.find((i) => i.id === itemId);
-    if (!found) return list;
-    updated = updater(found);
-    return {
-      ...list,
-      items: list.items.map((i) => (i.id === itemId ? updated! : i)),
-    };
-  });
-  if (!updated) return;
+  const owner = findOwner(itemId);
+  const found = owner?.items.find((i) => i.id === itemId);
+  if (!boundUser || !owner || !found) return;
+  const updated = updater(found);
+  setItems(
+    owner.id,
+    owner.items.map((i) => (i.id === itemId ? updated : i)),
+  );
   persistLists();
   enqueue({ type: "item.update", item: updated });
 }
@@ -228,66 +202,68 @@ function renameItem(itemId: string, text: string): void {
 }
 
 function deleteItem(itemId: string): void {
-  const user = requireUser();
-  if (!user) return;
-  const owner = lists.value.find((list) =>
-    list.items.some((i) => i.id === itemId),
-  );
-  if (!owner) return;
-  lists.value = lists.value.map((list) =>
-    list.id === owner.id
-      ? { ...list, items: list.items.filter((i) => i.id !== itemId) }
-      : list,
+  const owner = findOwner(itemId);
+  if (!boundUser || !owner) return;
+  setItems(
+    owner.id,
+    owner.items.filter((i) => i.id !== itemId),
   );
   persistLists();
   enqueue({ type: "item.delete", itemId, listId: owner.id });
 }
 
 function clearCompleted(listId: string): void {
-  const user = requireUser();
-  const list = lists.value.find((l) => l.id === listId);
-  if (!user || !list) return;
-  const done = list.items.filter((i) => i.done);
-  done.forEach((item) =>
-    enqueue({ type: "item.delete", itemId: item.id, listId }),
-  );
-  lists.value = lists.value.map((l) =>
-    l.id === listId ? { ...l, items: l.items.filter((i) => !i.done) } : l,
+  const list = findList(listId);
+  if (!boundUser || !list) return;
+  for (const item of list.items) {
+    if (item.done) enqueue({ type: "item.delete", itemId: item.id, listId });
+  }
+  setItems(
+    listId,
+    list.items.filter((i) => !i.done),
   );
   persistLists();
 }
 
+/**
+ * Zet `ids` om naar de entiteiten in die volgorde — alleen als het een
+ * volledige permutatie is die ook echt iets verandert; anders `null`.
+ */
+function reorderedBy<T extends { id: string }>(
+  current: readonly T[],
+  ids: readonly string[],
+): T[] | null {
+  const byId = new Map(current.map((entity) => [entity.id, entity]));
+  const next = ids
+    .map((id) => byId.get(id))
+    .filter((entity): entity is T => entity !== undefined);
+  if (next.length !== current.length) return null;
+  if (next.every((entity, index) => entity.id === current[index]?.id)) {
+    return null;
+  }
+  return next;
+}
+
 /** Past de item-volgorde aan (drag & drop) en enqueued een reorder-operatie. */
 function reorderItems(listId: string, itemIds: string[]): void {
-  const user = requireUser();
-  if (!user) return;
-  const list = lists.value.find((l) => l.id === listId);
-  if (!list) return;
+  const list = findList(listId);
+  if (!boundUser || !list) return;
+  const reordered = reorderedBy(list.items, itemIds);
+  if (!reordered) return;
 
-  const byId = new Map(list.items.map((i) => [i.id, i]));
-  const reordered = itemIds
-    .map((id) => byId.get(id))
-    .filter((i): i is ListItem => i !== undefined);
-  if (reordered.length !== list.items.length) return;
-  if (reordered.every((i, index) => i.id === list.items[index]?.id)) return;
-
-  const items = reordered.map((it, index) => ({ ...it, position: index }));
-  lists.value = lists.value.map((l) => (l.id === listId ? { ...l, items } : l));
+  setItems(
+    listId,
+    reordered.map((it, index) => ({ ...it, position: index })),
+  );
   persistLists();
   enqueue({ type: "item.reorder", listId, itemIds });
 }
 
 /** Past de lijst-volgorde aan (drag & drop) en enqueued een reorder-operatie. */
 function reorderLists(listIds: string[]): void {
-  const user = requireUser();
-  if (!user) return;
-
-  const byId = new Map(lists.value.map((l) => [l.id, l]));
-  const reordered = listIds
-    .map((id) => byId.get(id))
-    .filter((l): l is List => l !== undefined);
-  if (reordered.length !== lists.value.length) return;
-  if (reordered.every((l, index) => l.id === lists.value[index]?.id)) return;
+  if (!boundUser) return;
+  const reordered = reorderedBy(lists.value, listIds);
+  if (!reordered) return;
 
   lists.value = reordered;
   persistLists();
@@ -296,13 +272,6 @@ function reorderLists(listIds: string[]): void {
 
 function setActiveList(listId: string | null): void {
   activeListId.value = listId;
-}
-
-/** Aantal openstaande (niet gefaalde) outbox-operaties — voor de UI. */
-function pendingOps(): number {
-  const user = requireUser();
-  if (!user) return 0;
-  return loadQueue(user, browserStorage).filter((e) => !hasFailed(e)).length;
 }
 
 export function useLists() {
@@ -324,6 +293,5 @@ export function useLists() {
     reorderItems,
     reorderLists,
     setActiveList,
-    pendingOps,
   };
 }

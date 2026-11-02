@@ -28,7 +28,7 @@ vi.mock("../lib/supabase", () => ({
   isSupabaseConfigured: true,
 }));
 
-import { useAuth, webRedirectTarget } from "./useAuth";
+import { useAuth } from "./useAuth";
 
 describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)", () => {
   const AUTH = useAuth();
@@ -231,27 +231,5 @@ describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)",
 
     expect(auth.initialized.value).toBe(true);
     expect(auth.user.value).toBeNull();
-  });
-});
-
-describe("webRedirectTarget — web-redirect incl. subpad (AGENTS.md §8.12/§10.3)", () => {
-  it("neemt het pad mee, zodat een projectpagina onder /Lijsten/ werkt", () => {
-    expect(
-      webRedirectTarget({
-        origin: "https://sm4rtieqq.github.io",
-        pathname: "/Lijsten/",
-      }),
-    ).toBe("https://sm4rtieqq.github.io/Lijsten/");
-  });
-
-  it("werkt ook op de root (dev-server)", () => {
-    expect(
-      webRedirectTarget({ origin: "http://localhost:5173", pathname: "/" }),
-    ).toBe("http://localhost:5173/");
-  });
-
-  it("geeft null zonder origin (geen location)", () => {
-    expect(webRedirectTarget(undefined)).toBeNull();
-    expect(webRedirectTarget({})).toBeNull();
   });
 });

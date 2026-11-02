@@ -244,7 +244,7 @@ async function applyToClient(
 }
 
 /** De vorm die Supabase teruggeeft bij het opvragen van lijsten + items. */
-interface ServerList {
+export interface ServerList {
   id: string;
   title: string;
   created_at: string;
@@ -256,6 +256,25 @@ interface ServerList {
     position: number;
     created_at: string;
   }>;
+}
+
+/** Server-rij → domeinmodel; items gesorteerd op `position`. */
+export function toDomainList(row: ServerList): List {
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: row.created_at,
+    items: [...(row.list_items ?? [])]
+      .sort((a, b) => a.position - b.position)
+      .map((item) => ({
+        id: item.id,
+        listId: item.list_id,
+        text: item.text,
+        done: item.done,
+        position: item.position,
+        createdAt: item.created_at,
+      })),
+  };
 }
 
 /** Haalt de lijsten van één gebruiker op, expliciet gefilterd op `owner_id`. */
@@ -286,23 +305,7 @@ export async function pullListsFromServer(
     if (error) return { data: [], error: toUserFacingError(error) };
 
     const rows = (data ?? []) as unknown as ServerList[];
-    const lists: List[] = rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      createdAt: row.created_at,
-      items: [...(row.list_items ?? [])]
-        .sort((a, b) => a.position - b.position)
-        .map((item) => ({
-          id: item.id,
-          listId: item.list_id,
-          text: item.text,
-          done: item.done,
-          position: item.position,
-          createdAt: item.created_at,
-        })),
-    }));
-
-    return { data: lists, error: null };
+    return { data: rows.map(toDomainList), error: null };
   } catch (err) {
     // Netwerk weg / timeout: nooit een rejection doorslaan naar de caller.
     return { data: [], error: toUserFacingError(err) };

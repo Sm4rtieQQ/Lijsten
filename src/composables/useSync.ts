@@ -1,11 +1,11 @@
 import { ref, type Ref } from "vue";
 
-import { flushOutbox, backoffMs, pullListsFromServer } from "../lib/sync";
+import { nextRetryAttempt } from "../lib/outbox";
+import { flushOutbox, backoffMs } from "../lib/sync";
 import { toUserFacingError, NETWORK_ERROR } from "../lib/errorMessages";
 import { loadSyncMeta, loadQueue, browserStorage } from "../lib/storage";
 import { supabase } from "../lib/supabase";
-import { hasFailed, type OutboxEntry } from "../types/sync";
-import type { List } from "../types/app";
+import { hasFailed } from "../types/sync";
 
 export type SyncStatus = "synced" | "pending" | "syncing" | "error";
 
@@ -25,8 +25,6 @@ const status: Ref<SyncStatus> = ref("synced");
 const lastSyncedAt: Ref<string | null> = ref(null);
 const lastError: Ref<string | null> = ref(null);
 const queueLength: Ref<number> = ref(0);
-/** Eerste paar gefaalde outbox-operaties (voor leesbare UI-foutmeldingen). */
-const failedOps: Ref<OutboxEntry[]> = ref([]);
 
 let boundUser: string | null = null;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
@@ -78,7 +76,6 @@ export function bindSyncUser(userId: string | null): void {
   }
   status.value = "synced";
   lastError.value = null;
-  failedOps.value = [];
   if (userId) {
     const meta = loadSyncMeta(userId, browserStorage);
     lastSyncedAt.value = meta.lastSyncedAt;
@@ -87,7 +84,6 @@ export function bindSyncUser(userId: string | null): void {
   } else {
     lastSyncedAt.value = null;
     queueLength.value = 0;
-    failedOps.value = [];
   }
 }
 
@@ -100,7 +96,6 @@ function refreshStatus(): void {
   }
   const queue = boundUser ? loadQueue(boundUser, browserStorage) : [];
   queueLength.value = queue.length;
-  failedOps.value = queue.filter(hasFailed).slice(0, 3);
   if (queue.some(hasFailed)) {
     status.value = "error";
     return;
@@ -160,19 +155,14 @@ async function runFlush(): Promise<void> {
 
     if (!result.ok) {
       // retry met backoff op basis van de hoogste attempt-teller
-      const maxAttempts = Math.max(
-        0,
-        ...result.queue.map((entry) => entry.attempts),
-      );
-      scheduleRetry(maxAttempts + 1);
+      scheduleRetry(nextRetryAttempt(result.queue));
     }
   } catch (err) {
     // Onverwerkte fout (vangnet): status op error, leesbare tekst, retry.
     lastError.value = toUserFacingError(err);
     status.value = "error";
     const queue = boundUser ? loadQueue(boundUser, browserStorage) : [];
-    const maxAttempts = Math.max(0, ...queue.map((entry) => entry.attempts));
-    scheduleRetry(maxAttempts + 1);
+    scheduleRetry(nextRetryAttempt(queue));
   } finally {
     flushing = false;
   }
@@ -189,22 +179,13 @@ async function syncNow(): Promise<void> {
   await runFlush();
 }
 
-/** Haalt de lijsten van de server op en geeft ze terug (zonder cache te overschrijven). */
-async function fetchFromServer(): Promise<List[] | null> {
-  if (!boundUser || !supabase) return null;
-  const { data, error } = await pullListsFromServer(boundUser, supabase);
-  return error ? null : data;
-}
-
 export function useSync() {
   return {
     status,
     lastSyncedAt,
     lastError,
     queueLength,
-    failedOps,
     syncNow,
-    fetchFromServer,
     markDirty,
   };
 }
