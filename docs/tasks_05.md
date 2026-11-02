@@ -98,22 +98,23 @@ Gedrag van de terugknop, in volgorde van prioriteit:
 
 ## N4 — Swipe omlaag synchroniseert (pull-to-refresh)
 
-- [ ] **N4.1** `composables/usePullToRefresh.ts` (pointer-events, alleen
+- [x] **N4.1** `composables/usePullToRefresh.ts` (pointer-events, alleen
       `pointerType === "touch"`): start alleen als de pagina helemaal bovenaan
       staat (`scrollY === 0`) en niet op een invoerveld, sleephandvat of in een
       dialoog. Weerstand op de afstand; drempel ± 64 px.
-- [ ] **N4.2** Indicator bovenaan: een ronde spinner in het oranje palet
+      _Uitvoering: touch-events i.p.v. pointer-events — bij pointer-events neemt de browser het gebaar over om te scrollen (`pointercancel`). De toestandsmachine is puur; `PullToRefresh.vue` doet de listeners._
+- [x] **N4.2** Indicator bovenaan: een ronde spinner in het oranje palet
       (bestaande `@keyframes spin`) die meeschuift met de vinger; bij loslaten
       voorbij de drempel → `syncWithServer()` (N3); de pill toont dan zijn
       spinner en daarna **groen** (of rood bij een fout). Onder de drempel →
       terugveren zonder sync.
-- [ ] **N4.3** `overscroll-behavior-y: contain` op de pagina, zodat Chrome/PWA
+- [x] **N4.3** `overscroll-behavior-y: contain` op de pagina, zodat Chrome/PWA
       niet zelf de pagina herlaadt bij omlaag swipen.
-- [ ] **N4.4** Werkt in overzicht én detailweergave; botst niet met slepen (N5)
+- [x] **N4.4** Werkt in overzicht én detailweergave; botst niet met slepen (N5)
       of verticaal scrollen.
 - [ ] **N4.5** Tests: drempel, niet starten als er gescrold is, sync één keer.
-      Handmatig in Chrome DevTools met touch-emulatie.
-- [ ] Commit + AGENTS.md (nieuwe §8.14).
+      Handmatig in Chrome DevTools met touch-emulatie. _Tests af (usePullToRefresh.spec, PullToRefresh.spec); handmatige check nog door de gebruiker._
+- [x] Commit + AGENTS.md (nieuwe §8.14).
 
 ## N5 — Slepen toont een zwevende kopie
 

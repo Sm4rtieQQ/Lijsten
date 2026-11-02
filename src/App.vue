@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import HomeView from "./components/HomeView.vue";
 import ListDetailView from "./components/ListDetailView.vue";
 import LoginView from "./components/LoginView.vue";
+import PullToRefresh from "./components/PullToRefresh.vue";
 import RegisterView from "./components/RegisterView.vue";
 import ResetPasswordView from "./components/ResetPasswordView.vue";
 import SplashView from "./components/SplashView.vue";
@@ -237,6 +238,8 @@ onBeforeUnmount(() => {
            zichtbaar is (idem legacy: .view { display:none } / .view.active). -->
       <HomeView :class="{ active: !activeListId }" />
       <ListDetailView :class="{ active: !!activeListId }" />
+      <!-- Swipe omlaag synchroniseert, op beide schermen (§8.14). -->
+      <PullToRefresh />
     </template>
     <VerifyEmailView
       v-else-if="verificationEmail"

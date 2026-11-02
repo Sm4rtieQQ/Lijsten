@@ -93,6 +93,7 @@ Lijsten/
 │   │   ├── HomeView.vue          # Lijstoverzicht + accountmenu
 │   │   ├── ListDetailView.vue    # Lijstweergave, items, verwijderen
 │   │   ├── ConfirmDeleteDialog.vue
+│   │   ├── PullToRefresh.vue     # Swipe-omlaag-indicator + touch-listeners (§8.14)
 │   │   ├── SyncIndicator.vue
 │   │   └── *.spec.ts            # Vitest-tests staan naast de code
 │   ├── composables/
@@ -101,6 +102,7 @@ Lijsten/
 │   │   ├── useSync.ts
 │   │   ├── useArmedConfirm.ts    # Twee-staps bevestiging (§8.6)
 │   │   ├── useBackNavigation.ts  # Android-terugknop: handler-stapel + minimize (§8.13)
+│   │   ├── usePullToRefresh.ts   # Swipe omlaag: toestandsmachine (§8.14)
 │   │   ├── useDeepLink.ts        # Deep link: bevestiging + herstel (§8.11)
 │   │   └── *.spec.ts
 │   ├── pwa/
@@ -186,7 +188,7 @@ De **sync-interface** (`SyncIndicator.vue`) staat **rechtsboven** en is bewust *
 - **Inklappen:** na 1,5 seconden stabiele status verdwijnt het tekstlabel en blijft alleen de dot over. Dat geldt **zowel voor `synced` als voor `error`** — dezelfde `COLLAPSE_AFTER_MS`-timer en dezelfde `.sync-row.is-collapsed`-regels, dus één implementatie voor beide statussen. Bij `error` blijft de rode dot staan.
 - **Tijdstip:** het korte tijdstip staat naast de pill, de volledige NL-tijdstaat in de `title`-tooltip.
 - **Actie:** de pill zelf is de knop — `Synchroniseer nu`, of `Probeer opnieuw` wanneer er een fout is (retry van failed operations). Een klik doet een **volledige sync** (`syncWithServer`: outbox pushen en daarna de server binnenhalen), ook als de pill is ingeklapt tot alleen de dot. De klikzone is minimaal 44×44 px via een transparante rand van 13px met een negatieve marge; de pill oogt daardoor niet groter. De `aria-label` bevat status, actie en het laatste sync-tijdstip.
-- **Eén sync-functie.** Alles wat de gebruiker als synchroniseren ziet — de pill, terugkeren naar de app/het tabblad (`visibilitychange` in `App.vue`), en het opstarten (`hydrate`) — loopt via `syncWithServer()` in `useSync`. Er draait er hooguit één tegelijk; de pill staat de hele tijd op `syncing` en eindigt op `synced` of `error`. Een mislukte pull maakt de pill rood tot de volgende sync. De pull zelf staat in `useLists` en wordt met `registerPuller` aangemeld (geen circulaire import). Pushen na een mutatie, retry/backoff en het `online`-event blijven alleen de outbox flushen (`runFlush`).
+- **Eén sync-functie.** Alles wat de gebruiker als synchroniseren ziet — de pill, terugkeren naar de app/het tabblad (`visibilitychange` in `App.vue`), het opstarten (`hydrate`) en de swipe omlaag (§8.14) — loopt via `syncWithServer()` in `useSync`. Er draait er hooguit één tegelijk; de pill staat de hele tijd op `syncing` en eindigt op `synced` of `error`. Een mislukte pull maakt de pill rood tot de volgende sync. De pull zelf staat in `useLists` en wordt met `registerPuller` aangemeld (geen circulaire import). Pushen na een mutatie, retry/backoff en het `online`-event blijven alleen de outbox flushen (`runFlush`).
 - **Geen "Verversen"-knop** meer (noch in het accountmenu, noch in de detailheader). De cloud wordt ingehaald bij inloggen/hydrateren, wanneer de gebruiker terugkomt op het tabblad en via de pill.
 
 ### 7.5 Foutmeldingen (nooit ruwe fouten tonen)
@@ -343,6 +345,14 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Android-terugknop sluit de app nooit.** `App.vue` koppelt native `App.addListener("backButton", …)` via `useBackNavigation` (opruimen in `onBeforeUnmount`). Volgorde: (1) open dialoog sluiten (nieuw lijstje, verwijderbevestiging), (2) accountmenu sluiten of item-bewerken annuleren, (3) detailweergave → overzicht, (4) registratie-/verificatie-/herstelscherm → inloggen, (5) overzicht of inlogscherm → `App.minimizeApp()` (naar het Android-startscherm; de app blijft draaien).
 - Schermen en dialogen registreren een handler met `registerBackHandler(fn)` in hun eigen `onMounted` en melden zich af in `onBeforeUnmount` (§5). Een handler geeft `true` terug als hij de terugknop heeft afgehandeld; de nieuwste handler gaat voor. De auth-schermen lopen via de fallback in `App.vue` (zelfde volgorde als de view-keuze).
 - In de browser bestaat de terugknop niet; daar sluit **ESC** dialogen en het menu.
+
+### 8.14 Swipe omlaag synchroniseert (pull-to-refresh)
+
+- Staat de pagina **helemaal bovenaan** (`window.scrollY === 0`), dan start een swipe omlaag een pull. Een ronde indicator in het oranje palet schuift mee met de vinger (met weerstand, half zo snel). Voorbij de drempel (64 px) wordt de spinner vol; **loslaten** start `syncWithServer()` (§7.4). De indicator draait tot de sync klaar is; de pill toont tegelijk zijn spinner en daarna groen of rood. Onder de drempel loslaten → terugveren zonder sync.
+- Werkt in het overzicht én de detailweergave: één `PullToRefresh.vue` in `App.vue`, alleen voor een ingelogde gebruiker. De logica staat in `usePullToRefresh` (pure toestandsmachine, testbaar).
+- **Touch-events, geen pointer-events:** bij pointer-events neemt de browser het gebaar over om te scrollen (`pointercancel`). `touchmove` is niet-passief zodat de pull `preventDefault` kan doen. Alleen touch: met een muis gebeurt niets (test in Chrome DevTools met touch-emulatie).
+- Nooit starten vanaf een invoerveld, sleephandvat of dialoog, en niet tijdens een lopende sync. Omhoog bewegen is gewoon scrollen.
+- `overscroll-behavior-y: contain` op `html`/`body`, zodat Chrome/de PWA niet zelf de pagina herlaadt.
 
 ## 9. Stijl, conventies & kwaliteit
 

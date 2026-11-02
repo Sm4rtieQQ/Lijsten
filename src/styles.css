@@ -1243,3 +1243,51 @@ body.no-scroll {
     animation: none;
   }
 }
+
+/* ---------- Fase 8: swipe omlaag synchroniseert (§8.14) ---------- */
+/* Geen eigen pull-to-refresh van Chrome/PWA (die herlaadt de pagina). */
+html,
+body {
+  overscroll-behavior-y: contain;
+}
+.pull-indicator {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%;
+  z-index: 40;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 4px 14px rgba(52, 46, 42, 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+/* Tijdens het trekken volgt hij de vinger direct, zonder vertraging. */
+.pull-indicator.is-pulling {
+  transition: none;
+}
+.pull-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(230, 109, 53, 0.28);
+  border-top-color: var(--orange);
+  border-radius: 50%;
+}
+/* Voorbij de drempel: loslaten start de sync. */
+.pull-indicator.is-ready .pull-spinner {
+  border-right-color: var(--orange);
+}
+.pull-indicator.is-refreshing .pull-spinner {
+  animation: spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-indicator {
+    transition: none;
+  }
+}
