@@ -154,7 +154,7 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 
 ### 7.1 Kernprincipes
 
-- **Per-user cache.** Elke `localStorage`-key is **per `userId`**: `lijstjes:data:<userId>`, `lijstjes:queue:<userId>`. **Nooit** een globale key zonder userId. Bij uitloggen wordt alle state van die sessie geleegd.
+- **Per-user cache.** Elke `localStorage`-key is **per `userId`**: `lijstjes:data:<userId>`, `lijstjes:queue:<userId>`, `lijstjes:sync:<userId>` en `lijstjes:view:<userId>` (laatst bezochte pagina, §8.13). **Nooit** een globale key zonder userId. Bij uitloggen wordt alle state van die sessie geleegd.
 - **Server als gedeelde bron, client offline-first.** Wijzigingen gaan eerst naar de lokale cache + een operationele outbox (queue). Sync pusht de outbox naar Supabase in order.
 - **Nooit bulk-wipe naar server.** `syncToSupabase()` in de oude code deed `DELETE` van alle lijsten van de gebruiker en her-insertte alles — dat is de oorzaak van het cross-user datalek. **Deze destructieve bulk-sync wordt niet overgenomen.** Gebruik per-entiteit operaties (create/update/delete) vanuit de outbox.
 - **Defense in depth:** queries filteren **expliciet** op `owner_id = auth.uid()` waar mogelijk, en RLS blijft tweede beveiligingslaag (zoals in `supabase-schema.sql`).
@@ -332,6 +332,12 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Service worker-versie:** verhoog `CACHE_VERSION` in `public/sw.js` wanneer de app-shell wijzigt, zodat oude caches worden opgeruimd.
 - **Iconen:** de PNG's zijn gerasterd uit `public/icons/icon.svg` en `icon-maskable.svg` (ImageMagick). Wijzig de SVG en raster opnieuw; bewerk de PNG's niet met de hand.
 - **Testen:** Firefox is bruikbaar om de webapp te testen, maar installeert geen PWA. Gebruik Chrome (desktop/Android) of Safari (iOS). `npm run preview:host` toont de build op je telefoon via het LAN (http → alleen lay-out; voor de echte installatie is HTTPS nodig).
+
+### 8.13 Navigatie: laatst bezochte pagina
+
+- De app onthoudt per gebruiker de **laatst bezochte pagina**: het overzicht of een open lijst (`lijstjes:view:<userId>`, gezet door `setActiveList`). Bij opstarten, terugkeren naar de app/het tabblad en na synchroniseren blijft de gebruiker op die pagina.
+- Bestaat de onthouden lijst niet meer (lokaal verwijderd, of op een ander apparaat en binnengehaald door een pull), dan valt de app terug op het **overzicht**.
+- **Reageer in `App.vue` op het `user.id`, nooit op het `user`-object.** supabase-js vuurt bij elke terugkeer `SIGNED_IN`/`TOKEN_REFRESHED` met een nieuw object voor dezelfde gebruiker. Opnieuw hydrateren daarop toont het laadscherm en zette de app vroeger terug op het overzicht. Alleen een **andere** gebruiker (of uitloggen) reset en hydrateert.
 
 ## 9. Stijl, conventies & kwaliteit
 

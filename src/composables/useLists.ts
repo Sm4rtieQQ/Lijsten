@@ -7,6 +7,8 @@ import {
   loadQueue,
   saveQueue,
   clearUserData,
+  loadActiveView,
+  saveActiveView,
   browserStorage,
 } from "../lib/storage";
 import { flushOutbox, pullListsFromServer } from "../lib/sync";
@@ -60,14 +62,24 @@ function findList(listId: string): List | undefined {
   return lists.value.find((l) => l.id === listId);
 }
 
-/** Offline-first hydrate: cache laden → eigen outbox leegmaken → server pullen. */
+/** Valt terug op het overzicht als de open lijst niet (meer) bestaat. */
+function ensureActiveListExists(): void {
+  const id = activeListId.value;
+  if (id && !findList(id)) setActiveList(null);
+}
+
+/**
+ * Offline-first hydrate: cache laden → laatst bezochte pagina herstellen →
+ * eigen outbox leegmaken → server pullen (AGENTS.md §8.13).
+ */
 async function hydrate(userId: string): Promise<void> {
   boundUser = userId;
   const token = ++hydrateToken.value;
 
   const cached = loadLists(userId, browserStorage);
   lists.value = cached ?? [];
-  activeListId.value = null;
+  activeListId.value = loadActiveView(userId, browserStorage);
+  ensureActiveListExists();
 
   await refreshData();
   if (token === hydrateToken.value) markDirty();
@@ -97,6 +109,8 @@ async function refreshData(): Promise<void> {
   if (data && !error) {
     lists.value = data;
     saveLists(user, data, browserStorage);
+    // Op een ander apparaat verwijderd → terug naar het overzicht.
+    ensureActiveListExists();
   }
   markDirty();
 }
@@ -153,7 +167,7 @@ function deleteList(listId: string): void {
 
   lists.value = lists.value.filter((list) => list.id !== listId);
   persistLists();
-  if (activeListId.value === listId) activeListId.value = null;
+  ensureActiveListExists();
 }
 
 function addItem(listId: string, text: string): void {
@@ -270,8 +284,10 @@ function reorderLists(listIds: string[]): void {
   enqueue({ type: "list.reorder", listIds });
 }
 
+/** Opent een lijst (of `null` = overzicht) en onthoudt dat als laatste pagina. */
 function setActiveList(listId: string | null): void {
   activeListId.value = listId;
+  if (boundUser) saveActiveView(boundUser, listId, browserStorage);
 }
 
 export function useLists() {

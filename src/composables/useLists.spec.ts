@@ -10,7 +10,13 @@ vi.mock("../lib/supabase", () => ({
 }));
 vi.mock("./useSync", () => ({ markDirty: mockMarkDirty }));
 
-import { loadLists, loadQueue, saveLists } from "../lib/storage";
+import {
+  loadActiveView,
+  loadLists,
+  loadQueue,
+  saveActiveView,
+  saveLists,
+} from "../lib/storage";
 import { createList, createListItem } from "../types/app";
 import { useLists } from "./useLists";
 
@@ -165,5 +171,43 @@ describe("useLists — per-user isolatie (AGENTS.md §7.1)", () => {
     L.createNewList("Niemand");
     expect(L.lists.value).toEqual([]);
     expect(localStorage.length).toBe(0);
+  });
+});
+
+describe("useLists — laatst bezochte pagina (AGENTS.md §8.13)", () => {
+  it("hydrate opent de laatst bezochte lijst weer", async () => {
+    const id = L.createNewList("Boodschappen");
+    L.setActiveList(id);
+    expect(loadActiveView(USER)).toBe(id);
+
+    await L.hydrate(USER); // bv. app opnieuw geopend
+    expect(L.activeListId.value).toBe(id);
+  });
+
+  it("terug naar het overzicht wordt ook onthouden", async () => {
+    const id = L.createNewList("Boodschappen");
+    L.setActiveList(id);
+    L.setActiveList(null);
+    await L.hydrate(USER);
+    expect(L.activeListId.value).toBeNull();
+  });
+
+  it("valt terug op het overzicht als de lijst niet meer bestaat", async () => {
+    const id = L.createNewList("Weg");
+    L.setActiveList(id);
+    L.deleteList(id);
+    expect(L.activeListId.value).toBeNull();
+    expect(loadActiveView(USER)).toBeNull();
+
+    saveActiveView(USER, "bestaat-niet");
+    await L.hydrate(USER);
+    expect(L.activeListId.value).toBeNull();
+  });
+
+  it("reset wist de onthouden pagina (per-user, §7.1)", () => {
+    const id = L.createNewList("x");
+    L.setActiveList(id);
+    L.reset();
+    expect(loadActiveView(USER)).toBeNull();
   });
 });

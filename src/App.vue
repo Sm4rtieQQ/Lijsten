@@ -123,22 +123,27 @@ watch(
 // Bij wisselen van gebruiker: volledig opnieuw hydrateren (of legen).
 // Ook bij een directe wissel A → B (zonder logout-event) wordt de vorige
 // sessie eerst volledig gewist (per-user keys + in-memory state).
+//
+// Bewust op het **id** en niet op het `user`-object (§8.13): supabase-js vuurt
+// bij elke terugkeer naar de app `SIGNED_IN`/`TOKEN_REFRESHED` met een nieuw
+// object voor dezelfde gebruiker. Daarop opnieuw hydrateren toonde het
+// laadscherm en zette de app terug op het overzicht.
 watch(
-  user,
-  (next, prev) => {
-    if (!next) {
+  () => user.value?.id ?? null,
+  (nextId, prevId) => {
+    if (!nextId) {
       stopHydrating();
       reset();
       bindSyncUser(null);
       sessionKey.value += 1;
       return;
     }
-    if (prev && prev.id !== next.id) {
+    if (prevId) {
       reset();
       bindSyncUser(null);
     }
-    beginHydrate(next.id);
-    bindSyncUser(next.id);
+    beginHydrate(nextId);
+    bindSyncUser(nextId);
     sessionKey.value += 1;
   },
   { immediate: true },

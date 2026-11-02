@@ -32,25 +32,25 @@
 
 ## N1 — Laatst bezochte pagina blijft staan (bugfix + persistentie)
 
-- [ ] **N1.1** `App.vue` `watch(user)`: alleen reageren op een **andere
+- [x] **N1.1** `App.vue` `watch(user)`: alleen reageren op een **andere
       gebruiker** (`prev?.id !== next?.id`). Dezelfde gebruiker met een nieuw
       sessie-object (`SIGNED_IN`/`TOKEN_REFRESHED` na terugkeer) → geen reset,
       geen hydrate, geen laadscherm; hooguit een gewone sync (N3).
-- [ ] **N1.2** Laatste pagina per gebruiker bewaren: `lijstjes:view:<userId>`
+- [x] **N1.2** Laatste pagina per gebruiker bewaren: `lijstjes:view:<userId>`
       (`null` = overzicht, anders `listId`) in `lib/storage.ts`, meegewist door
       `clearUserData` (§7.1: per-user key, weg bij uitloggen).
-- [ ] **N1.3** `hydrate()` zet `activeListId` niet meer hard op `null`, maar
+- [x] **N1.3** `hydrate()` zet `activeListId` niet meer hard op `null`, maar
       herstelt de bewaarde pagina zodra de lijst in de cache staat. Bestaat de
       lijst niet (meer), na de pull ook niet → overzicht.
-- [ ] **N1.4** `setActiveList` schrijft de pagina weg; wordt de actieve lijst
+- [x] **N1.4** `setActiveList` schrijft de pagina weg; wordt de actieve lijst
       verwijderd (lokaal, of op een ander apparaat en binnengehaald door een
       pull) → terug naar overzicht.
-- [ ] **N1.5** Tests: `useLists.spec` (herstel na hydrate, verwijderde lijst →
+- [x] **N1.5** Tests: `useLists.spec` (herstel na hydrate, verwijderde lijst →
       overzicht, reset wist de key), `App`-gedrag: hetzelfde `user.id` met een
       nieuw object triggert geen hydrate.
 - [ ] **N1.6** Handmatig: lijst openen → ander tabblad → terug = zelfde lijst;
       pagina herladen = zelfde lijst; uitloggen/inloggen als B = overzicht van B.
-- [ ] Commit + AGENTS.md (§7.1 key, nieuwe §8.13 "Navigatie").
+- [x] Commit + AGENTS.md (§7.1 key, nieuwe §8.13 "Navigatie").
 
 ## N2 — Android-terugknop sluit de app niet meer
 
