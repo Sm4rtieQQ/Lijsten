@@ -16,6 +16,7 @@ vi.mock("../lib/sync", () => ({
 
 vi.mock("../lib/storage", () => ({
   loadSyncMeta: mockLoadSyncMeta,
+  saveSyncMeta: vi.fn(),
   loadQueue: mockLoadQueue,
   browserStorage: {},
 }));
@@ -25,9 +26,15 @@ vi.mock("../lib/supabase", () => ({
   isSupabaseConfigured: true,
 }));
 
-import { bindSyncUser, markDirty, useSync } from "./useSync";
+import {
+  bindSyncUser,
+  markDirty,
+  registerPuller,
+  syncWithServer,
+  useSync,
+} from "./useSync";
 
-const { status, lastError } = useSync();
+const { status, lastError, lastSyncedAt, syncNow } = useSync();
 
 /** jsdom kent `navigator.onLine`; per test overschrijven op het instance-object. */
 function setOnline(value: boolean): void {
@@ -104,5 +111,85 @@ describe("useSync — offline fast-path (D6, AGENTS.md §7.4)", () => {
     bindSyncUser("user-1");
     markDirty();
     expect(status.value).toBe("synced");
+  });
+});
+
+describe("useSync — volledige sync: pushen en dan binnenhalen (AGENTS.md §7.4)", () => {
+  const puller = vi.fn<() => Promise<string | null>>();
+
+  beforeEach(() => {
+    setOnline(true);
+    mockFlushOutbox.mockReset();
+    mockLoadQueue.mockReset();
+    mockLoadSyncMeta.mockReset();
+    mockLoadQueue.mockReturnValue([]);
+    mockLoadSyncMeta.mockReturnValue({ lastSyncedAt: null });
+    mockFlushOutbox.mockResolvedValue({ ok: true, queue: [], error: null });
+    puller.mockReset();
+    puller.mockResolvedValue(null);
+    registerPuller(puller);
+    bindSyncUser("user-1");
+  });
+
+  afterEach(() => {
+    registerPuller(null);
+    bindSyncUser(null);
+  });
+
+  it("pusht eerst, haalt dan binnen; spinner tijdens de pull, daarna groen", async () => {
+    let finishPull: (value: string | null) => void = () => {};
+    puller.mockImplementation(
+      () => new Promise((resolve) => (finishPull = resolve)),
+    );
+
+    const run = syncWithServer();
+    await vi.waitFor(() => expect(puller).toHaveBeenCalledOnce());
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+    expect(status.value).toBe("syncing");
+
+    finishPull(null);
+    await run;
+    expect(status.value).toBe("synced");
+    expect(lastSyncedAt.value).not.toBeNull();
+  });
+
+  it("haalt niet binnen als de outbox na het pushen niet leeg is", async () => {
+    mockFlushOutbox.mockResolvedValue({
+      ok: false,
+      queue: [{ opId: "op-1", attempts: 1, lastError: "x" }],
+      error: "Synchronisatie mislukt. Probeer het opnieuw.",
+    });
+    await syncWithServer();
+    expect(puller).not.toHaveBeenCalled();
+  });
+
+  it("twee aanroepen tegelijk = één sync", async () => {
+    await Promise.all([syncWithServer(), syncWithServer()]);
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+    expect(puller).toHaveBeenCalledOnce();
+  });
+
+  it("een mislukte pull maakt de pill rood; de volgende sync herstelt", async () => {
+    puller.mockResolvedValueOnce(NETWORK_ERROR);
+    await syncWithServer();
+    expect(status.value).toBe("error");
+    expect(lastError.value).toBe(NETWORK_ERROR);
+
+    await syncWithServer();
+    expect(status.value).toBe("synced");
+    expect(lastError.value).toBeNull();
+  });
+
+  it("een gooiende pull wordt afgevangen (reject nooit, §7.5)", async () => {
+    puller.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await expect(syncWithServer()).resolves.toBeUndefined();
+    expect(status.value).toBe("error");
+    expect(lastError.value).toBe(NETWORK_ERROR);
+  });
+
+  it("de pill (syncNow) doet de volledige sync", async () => {
+    await syncNow();
+    expect(mockFlushOutbox).toHaveBeenCalledOnce();
+    expect(puller).toHaveBeenCalledOnce();
   });
 });

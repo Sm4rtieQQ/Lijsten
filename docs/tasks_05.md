@@ -79,21 +79,22 @@ Gedrag van de terugknop, in volgorde van prioriteit:
 
 ## N3 — Volledige sync via de pill (en één sync-functie)
 
-- [ ] **N3.1** `useSync.syncWithServer()`: outbox pushen **en daarna** de server
+- [x] **N3.1** `useSync.syncWithServer()`: outbox pushen **en daarna** de server
       binnenhalen (alleen bij een lege outbox, zoals nu in `refreshData`). Eén
       lopende sync tegelijk (gedeelde promise); status `syncing` voor de hele
       duur, daarna `synced` of `error`. `refreshData` in `useLists` levert de
       pull aan via een geregistreerde callback (geen circulaire import).
-- [ ] **N3.2** Alle sync-triggers gebruiken deze functie: pill-klik,
+- [x] **N3.2** Alle sync-triggers gebruiken deze functie: pill-klik,
       `visibilitychange` in `App.vue`, `hydrate` en straks de swipe (N4).
       `flushOutbox` blijft nooit rejecten (§7.5); het `online`-event en de
       retry/backoff blijven werken.
-- [ ] **N3.3** Pill-klik werkt ook **ingeklapt** (alleen de dot): de
+- [x] **N3.3** Pill-klik werkt ook **ingeklapt** (alleen de dot): de
       klikzone wordt minimaal 44×44 px via een onzichtbaar `::before`-vlak,
       zónder dat de pill visueel groter wordt. Tijdens `syncing` niet klikbaar.
-- [ ] **N3.4** Tests: `useSync.spec` (push + pull, geen dubbele sync, status
+      _Uitvoering: een transparante rand van 13px met negatieve marge i.p.v. `::before` — de pill heeft `overflow: hidden`, dat zou een `::before`-vlak afknippen. Visueel nog te controleren in de browser._
+- [x] **N3.4** Tests: `useSync.spec` (push + pull, geen dubbele sync, status
       tijdens/na), `SyncIndicator.spec` (klik ingeklapt → sync).
-- [ ] Commit + AGENTS.md §7.4.
+- [x] Commit + AGENTS.md §7.4.
 
 ## N4 — Swipe omlaag synchroniseert (pull-to-refresh)
 

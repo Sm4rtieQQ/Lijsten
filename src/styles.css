@@ -358,6 +358,30 @@ h2 {
 .sync-indicator[data-status="error"] .sync-dot {
   background: #a3382f;
 }
+/* Klikzone (§7.4/§9): een transparante rand van 13px maakt de pill — ook
+   ingeklapt tot alleen de dot — minstens 44×44 px raakbaar, zonder dat hij
+   groter oogt. De negatieve marge houdt de lay-out gelijk; de achtergrond
+   blijft binnen de padding-box. Maten = oude maat + 2 × 13px. */
+.sync-pill {
+  border: 13px solid transparent;
+  margin: -13px;
+  min-height: 44px;
+  max-width: 326px;
+}
+.sync-row.is-collapsed .sync-pill {
+  min-width: 42px;
+  min-height: 44px;
+  max-width: 44px;
+}
+/* Ná de status- en hover-regels: hun `background`-shorthand zet de clip terug. */
+.sync-indicator .sync-pill,
+.sync-indicator[data-status] .sync-pill,
+.sync-indicator .sync-pill:hover:not(:disabled) {
+  background-clip: padding-box;
+}
+.sync-pill:focus-visible {
+  outline-offset: -13px;
+}
 .sync-spinner {
   width: 11px;
   height: 11px;

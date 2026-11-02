@@ -146,8 +146,9 @@ watch(
       reset();
       bindSyncUser(null);
     }
-    beginHydrate(nextId);
+    // Eerst de sync binden: hydrate synchroniseert via useSync (§7.4).
     bindSyncUser(nextId);
+    beginHydrate(nextId);
     sessionKey.value += 1;
   },
   { immediate: true },

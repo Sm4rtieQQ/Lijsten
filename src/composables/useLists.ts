@@ -11,7 +11,7 @@ import {
   saveActiveView,
   browserStorage,
 } from "../lib/storage";
-import { flushOutbox, pullListsFromServer } from "../lib/sync";
+import { pullListsFromServer } from "../lib/sync";
 import { supabase } from "../lib/supabase";
 import type { OutboxOpPayload } from "../types/sync";
 import {
@@ -20,7 +20,7 @@ import {
   type List,
   type ListItem,
 } from "../types/app";
-import { markDirty } from "./useSync";
+import { markDirty, registerPuller, syncWithServer } from "./useSync";
 
 /**
  * Lijst-data + alle mutaties via de outbox (singleton-state).
@@ -74,7 +74,7 @@ function ensureActiveListExists(): void {
  */
 async function hydrate(userId: string): Promise<void> {
   boundUser = userId;
-  const token = ++hydrateToken.value;
+  hydrateToken.value += 1;
 
   const cached = loadLists(userId, browserStorage);
   lists.value = cached ?? [];
@@ -82,38 +82,37 @@ async function hydrate(userId: string): Promise<void> {
   ensureActiveListExists();
 
   await refreshData();
-  if (token === hydrateToken.value) markDirty();
 }
 
 /**
- * Handmatige/automatische verversing: eerst de eigen outbox leegmaken,
- * daarna — alleen als de outbox nu leeg is — de server binnenhalen.
- * Een niet-lege outbox betekent dat de lokale cache nog ongeverifieerde
- * wijzigingen heeft; dan blijft de lokale state leidend.
+ * Verversen = volledige sync via `useSync` (outbox pushen, dan de server
+ * binnenhalen), zodat de pill meeloopt (AGENTS.md §7.4).
  */
-async function refreshData(): Promise<void> {
-  const user = boundUser;
-  if (!user || !supabase) return;
-  const token = hydrateToken.value;
-
-  await flushOutbox(user, supabase, browserStorage);
-  if (token !== hydrateToken.value) return; // gebruiker is gewisseld ondertussen
-
-  const after = loadQueue(user, browserStorage);
-  if (after.length > 0) {
-    markDirty();
-    return;
-  }
-  const { data, error } = await pullListsFromServer(user, supabase);
-  if (token !== hydrateToken.value) return;
-  if (data && !error) {
-    lists.value = data;
-    saveLists(user, data, browserStorage);
-    // Op een ander apparaat verwijderd → terug naar het overzicht.
-    ensureActiveListExists();
-  }
-  markDirty();
+function refreshData(): Promise<void> {
+  return syncWithServer();
 }
+
+/**
+ * De pull-stap van een volledige sync (geregistreerd bij `useSync`).
+ * Alleen bij een lege outbox: anders heeft de lokale cache nog
+ * ongeverifieerde wijzigingen en blijft de lokale state leidend.
+ */
+async function pullFromServer(): Promise<string | null> {
+  const user = boundUser;
+  if (!user || !supabase) return null;
+  const token = hydrateToken.value;
+  if (loadQueue(user, browserStorage).length > 0) return null;
+
+  const { data, error } = await pullListsFromServer(user, supabase);
+  if (token !== hydrateToken.value) return null; // gebruiker gewisseld
+  if (error) return error;
+  lists.value = data;
+  saveLists(user, data, browserStorage);
+  // Op een ander apparaat verwijderd → terug naar het overzicht.
+  ensureActiveListExists();
+  return null;
+}
+registerPuller(pullFromServer);
 
 /** Wist alle state + per-user keys (uitloggen of gebruiker wisselen). */
 function reset(): void {

@@ -8,7 +8,11 @@ vi.mock("../lib/supabase", () => ({
   supabase: null,
   isSupabaseConfigured: false,
 }));
-vi.mock("./useSync", () => ({ markDirty: mockMarkDirty }));
+vi.mock("./useSync", () => ({
+  markDirty: mockMarkDirty,
+  registerPuller: vi.fn(),
+  syncWithServer: vi.fn(() => Promise.resolve()),
+}));
 
 import {
   loadActiveView,

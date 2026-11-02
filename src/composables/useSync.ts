@@ -3,11 +3,23 @@ import { ref, type Ref } from "vue";
 import { nextRetryAttempt } from "../lib/outbox";
 import { flushOutbox, backoffMs } from "../lib/sync";
 import { toUserFacingError, NETWORK_ERROR } from "../lib/errorMessages";
-import { loadSyncMeta, loadQueue, browserStorage } from "../lib/storage";
+import {
+  loadSyncMeta,
+  saveSyncMeta,
+  loadQueue,
+  browserStorage,
+} from "../lib/storage";
 import { supabase } from "../lib/supabase";
 import { hasFailed } from "../types/sync";
 
 export type SyncStatus = "synced" | "pending" | "syncing" | "error";
+
+/**
+ * Haalt de server binnen in de lokale state. Geeft een leesbare NL-fout terug,
+ * of `null` bij succes (of als er niets te halen viel). Wordt door `useLists`
+ * geregistreerd; zo kent deze module de lijst-data niet (geen circulaire import).
+ */
+export type Puller = () => Promise<string | null>;
 
 /**
  * Sync-status + scheduler (singleton-state).
@@ -15,11 +27,16 @@ export type SyncStatus = "synced" | "pending" | "syncing" | "error";
  * Statussen (zie AGENTS.md §7.4):
  * - `synced`:   outbox leeg, geen fouten — alles gesynchroniseerd.
  * - `pending`:  outbox heeft openstaande (niet gefaalde) operaties.
- * - `syncing`:  een flush draait op dit moment.
- * - `error`:    minstens één operatie is gefaald (wordt met backoff herhaald).
+ * - `syncing`:  een flush of pull draait op dit moment.
+ * - `error`:    een operatie of de pull is mislukt (de outbox wordt met
+ *               backoff herhaald; de pull bij de volgende sync).
  *
- * De lijst-data zelf leeft in `useLists`; deze module regelt alleen het
- * synchroniseren en de status-afleiding.
+ * Er zijn twee soorten synchroniseren:
+ * - `runFlush`: alleen de outbox pushen. Automatisch na elke mutatie en bij
+ *   retry/backoff of het `online`-event.
+ * - `syncWithServer`: pushen **en** daarna de server binnenhalen. Voor alles
+ *   wat de gebruiker als "synchroniseren" ziet: de pill, terugkeren naar de
+ *   app, het opstarten en de swipe omlaag.
  */
 const status: Ref<SyncStatus> = ref("synced");
 const lastSyncedAt: Ref<string | null> = ref(null);
@@ -30,6 +47,12 @@ let boundUser: string | null = null;
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let flushing = false;
+let pulling = false;
+/** Fout van de laatste pull; houdt de pill rood tot de volgende sync. */
+let pullError: string | null = null;
+let flushInFlight: Promise<boolean> | null = null;
+let syncInFlight: Promise<void> | null = null;
+let puller: Puller | null = null;
 /** Navigatie is als offline bekend (`navigator.onLine === false`): status forceren
  *  op error en niet eens proberen te flushen (fast-path voor de D6-fix). */
 let offlineMode = false;
@@ -61,6 +84,11 @@ function registerConnectivityListeners(): void {
 }
 registerConnectivityListeners();
 
+/** Registreert de pull van `useLists` (eenmalig, bij het laden van die module). */
+export function registerPuller(fn: Puller | null): void {
+  puller = fn;
+}
+
 /** Bindt de huidige gebruiker; bij wisselen wordt alle sync-state gereset. */
 export function bindSyncUser(userId: string | null): void {
   boundUser = userId;
@@ -76,6 +104,7 @@ export function bindSyncUser(userId: string | null): void {
   }
   status.value = "synced";
   lastError.value = null;
+  pullError = null;
   if (userId) {
     const meta = loadSyncMeta(userId, browserStorage);
     lastSyncedAt.value = meta.lastSyncedAt;
@@ -96,8 +125,12 @@ function refreshStatus(): void {
   }
   const queue = boundUser ? loadQueue(boundUser, browserStorage) : [];
   queueLength.value = queue.length;
-  if (queue.some(hasFailed)) {
+  if (queue.some(hasFailed) || pullError) {
     status.value = "error";
+    return;
+  }
+  if (pulling) {
+    status.value = "syncing";
     return;
   }
   if (queue.length > 0) {
@@ -121,8 +154,21 @@ function scheduleFlush(delay = 700): void {
   }, delay);
 }
 
-async function runFlush(): Promise<void> {
-  if (!boundUser || !supabase || flushing) return;
+/**
+ * Pusht de outbox. Loopt er al een flush, dan wacht de aanroeper op díe flush
+ * (geen tweede tegelijk). `true` = de outbox is nu leeg en er is verbinding.
+ */
+function runFlush(): Promise<boolean> {
+  if (!flushInFlight) {
+    flushInFlight = doFlush().finally(() => {
+      flushInFlight = null;
+    });
+  }
+  return flushInFlight;
+}
+
+async function doFlush(): Promise<boolean> {
+  if (!boundUser || !supabase) return false;
   // Offline bekend (DevTools-'Offline', vliegtuigmodus, écht geen netwerk):
   // niet eens proberen te flushen — meteen 'error'. Een hangende request kan
   // hierdoor nooit meer de spinner blokkeren (D6-fix); het 'online'-event
@@ -131,7 +177,7 @@ async function runFlush(): Promise<void> {
     offlineMode = true;
     status.value = "error";
     lastError.value = NETWORK_ERROR;
-    return;
+    return false;
   }
   const userId = boundUser;
   flushing = true;
@@ -145,7 +191,7 @@ async function runFlush(): Promise<void> {
     const result = await flushOutbox(userId, supabase, browserStorage);
 
     queueLength.value = result.queue.length;
-    lastError.value = result.error;
+    lastError.value = result.error ?? pullError;
     if (result.ok) {
       lastSyncedAt.value = new Date().toISOString();
     }
@@ -157,12 +203,14 @@ async function runFlush(): Promise<void> {
       // retry met backoff op basis van de hoogste attempt-teller
       scheduleRetry(nextRetryAttempt(result.queue));
     }
+    return result.ok && result.queue.length === 0;
   } catch (err) {
     // Onverwerkte fout (vangnet): status op error, leesbare tekst, retry.
     lastError.value = toUserFacingError(err);
     status.value = "error";
     const queue = boundUser ? loadQueue(boundUser, browserStorage) : [];
     scheduleRetry(nextRetryAttempt(queue));
+    return false;
   } finally {
     flushing = false;
   }
@@ -173,10 +221,53 @@ function scheduleRetry(attempts: number): void {
   retryTimer = setTimeout(() => void runFlush(), backoffMs(attempts));
 }
 
-/** Handmatig "Synchroniseer nu" (ook voor retry van gefaalde operaties). */
-async function syncNow(): Promise<void> {
-  if (!boundUser) return;
-  await runFlush();
+/**
+ * Volledige sync: outbox pushen en daarna de server binnenhalen (alleen als
+ * de outbox leeg is — anders blijft de lokale state leidend). Eén tegelijk:
+ * een tweede aanroep wacht op de lopende. De pill staat de hele tijd op
+ * `syncing` en eindigt op `synced` of `error`. Reject nooit (§7.5).
+ */
+export function syncWithServer(): Promise<void> {
+  if (!syncInFlight) {
+    syncInFlight = doSync().finally(() => {
+      syncInFlight = null;
+    });
+  }
+  return syncInFlight;
+}
+
+async function doSync(): Promise<void> {
+  const userId = boundUser;
+  if (!userId || !supabase) return;
+  pullError = null;
+
+  const flushed = await runFlush();
+  if (!flushed || !puller || boundUser !== userId) {
+    refreshStatus();
+    return;
+  }
+
+  pulling = true;
+  status.value = "syncing";
+  try {
+    pullError = await puller();
+  } catch (err) {
+    pullError = toUserFacingError(err);
+  } finally {
+    pulling = false;
+  }
+  if (boundUser !== userId) return; // gebruiker gewisseld tijdens de pull
+
+  lastError.value = pullError;
+  if (!pullError) {
+    lastSyncedAt.value = new Date().toISOString();
+    saveSyncMeta(
+      userId,
+      { lastSyncedAt: lastSyncedAt.value, lastError: null },
+      browserStorage,
+    );
+  }
+  refreshStatus();
 }
 
 export function useSync() {
@@ -185,7 +276,8 @@ export function useSync() {
     lastSyncedAt,
     lastError,
     queueLength,
-    syncNow,
+    /** De pill: volledige sync (ook voor retry van gefaalde operaties). */
+    syncNow: syncWithServer,
     markDirty,
   };
 }
