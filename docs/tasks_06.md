@@ -49,7 +49,7 @@
 - [x] **V1.4** Automatische pull bij terugkeren (`App.vue`, `visibilitychange`)
       hooguit één keer per 30 s; pill en swipe zijn niet begrensd.
 - [x] **V1.5** Retry/backoff na een mislukte poging blijft ongewijzigd.
-- [ ] **V1.6** Tests (fake timers): timer start opnieuw bij elke wijziging,
+- [x] **V1.6** Tests (fake timers): timer start opnieuw bij elke wijziging, — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
       maximum van 2 min, directe triggers, uitloggen met en zonder lege outbox,
       pull-begrenzing. Handmatig: tien items toevoegen → pill 30 s amber → één
       sync. _Tests af (useSync, App, HomeView.logout); handmatige check nog door de gebruiker._
@@ -102,7 +102,7 @@
 unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
       `public`/`anon`, `grant execute` aan `authenticated`.
       `reorder_lists` filtert ook expliciet op `owner_id = auth.uid()` (§7.1).
-- [ ] **V4.2** **Uitvoeren in de SQL Editor van Supabase — door de gebruiker**
+- [x] **V4.2** **Uitvoeren in de SQL Editor van Supabase — door de gebruiker** — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
       (kan niet vanuit de repo), daarna testen met een eigen account.
       _Uitgevoerd door de gebruiker; gecontroleerd 2026-11-02: beide functies bestaan en `anon` krijgt `permission denied` (42501). Nog open: een sleep met een eigen account geeft één POST naar `rpc/reorder_items`._
 - [x] **V4.3** `sync.ts`: `item.reorder`/`list.reorder` via `client.rpc(…)`.

@@ -48,7 +48,7 @@
 - [x] **N1.5** Tests: `useLists.spec` (herstel na hydrate, verwijderde lijst →
       overzicht, reset wist de key), `App`-gedrag: hetzelfde `user.id` met een
       nieuw object triggert geen hydrate.
-- [ ] **N1.6** Handmatig: lijst openen → ander tabblad → terug = zelfde lijst;
+- [x] **N1.6** Handmatig: lijst openen → ander tabblad → terug = zelfde lijst; — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
       pagina herladen = zelfde lijst; uitloggen/inloggen als B = overzicht van B.
 - [x] Commit + AGENTS.md (§7.1 key, nieuwe §8.13 "Navigatie").
 
@@ -112,7 +112,7 @@ Gedrag van de terugknop, in volgorde van prioriteit:
       niet zelf de pagina herlaadt bij omlaag swipen.
 - [x] **N4.4** Werkt in overzicht én detailweergave; botst niet met slepen (N5)
       of verticaal scrollen.
-- [ ] **N4.5** Tests: drempel, niet starten als er gescrold is, sync één keer.
+- [x] **N4.5** Tests: drempel, niet starten als er gescrold is, sync één keer. — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
       Handmatig in Chrome DevTools met touch-emulatie. _Tests af (usePullToRefresh.spec, PullToRefresh.spec); handmatige check nog door de gebruiker._
 - [x] Commit + AGENTS.md (nieuwe §8.14).
 
@@ -134,11 +134,24 @@ Gedrag van de terugknop, in volgorde van prioriteit:
 - [x] **N5.4** Touch: `touch-action: none` op het handvat (niet op de hele
       kaart), zodat scrollen en de swipe (N4) blijven werken.
 - [x] **N5.5** Toegankelijkheid: het handvat blijft een knop met `aria-label`.
-- [ ] **N5.6** Tests: `useDragReorder` (doel bepalen, afbreken, resultaat naar
+- [x] **N5.6** Tests: `useDragReorder` (doel bepalen, afbreken, resultaat naar — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
       `moveId`). Handmatig met muis en met touch-emulatie. _Tests af (useDragReorder.spec, HomeView.spec); handmatige check nog door de gebruiker._
 - [x] Commit + AGENTS.md (nieuwe §8.15 Slepen).
 
 ## N6 — Android-test (gated: pas na akkoord gebruiker op de webversie)
+
+> **Stand 2026-11-02:** webversie goedgekeurd door de gebruiker. De Android-build
+> is **op verzoek uitgesteld**: de release-keystore (`lijstjes-release.jks` +
+> `android/keystore.properties`) staat niet op de huidige Windows-pc, en een
+> update over 1.3 heen vereist dezelfde sleutel. Omgeving op deze pc: Android
+> SDK via `ANDROID_HOME` (platform `android-36`, build-tools 35/36), JDK 21 via
+> `JAVA_HOME` — geschikt voor Gradle; alleen de keystore ontbreekt.
+>
+> **Later (besluit gebruiker):** de APK downloadbaar maken op GitHub via een
+> **GitHub Actions-workflow** die bij een release-tag bouwt en ondertekent; de
+> keystore en wachtwoorden komen dan als versleutelde repository-secrets op
+> GitHub. De PWA blijft daarbij via GitHub Pages werken (de APK hoort **niet**
+> in `public/`, anders belandt hij in de Pages-deploy en de service worker).
 
 - [ ] Versie 1.4 (`package.json`, `versionName`/`versionCode`), `CACHE_VERSION`
       in `public/sw.js` verhogen, build + `android:sync`, APK volgens §10.2.

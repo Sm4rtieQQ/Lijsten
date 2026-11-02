@@ -14,7 +14,7 @@
 
 - [x] **R2.1** `src/lib/platform.ts`: `isNativePlatform`, `APP_SCHEME`, `webRedirectTarget`, `emailRedirectTo` — `isNativePlatform` stond dubbel in `useAuth.ts` en `useDeepLink.ts`. Met spec.
 - [x] **R2.2** `src/lib/validation.ts`: `MIN_PASSWORD_LENGTH` + `validateNewPassword(password, repeat)` — stond driemaal (`useAuth`, `RegisterView`, `ResetPasswordView`). Met spec.
-- [ ] **R2.3** `moveId(ids, fromId, toId)` in `src/lib/utils.ts` — identieke drop-logica in `HomeView` en `ListDetailView`. Met spec. — _tests groen; drag & drop nog in de browser controleren_
+- [x] **R2.3** `moveId(ids, fromId, toId)` in `src/lib/utils.ts` — identieke drop-logica in `HomeView` en `ListDetailView`. Met spec. — _tests groen; drag & drop nog in de browser controleren_ — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
 - [x] **R2.4** `pruneQueueForList(queue, listId)` in `src/lib/outbox.ts` (uit `useLists.deleteList`) + `createOutboxEntry(op)`. Met spec.
 
 ## R3 — Composables opschonen
@@ -28,9 +28,9 @@
 
 ## R4 — Componenten (identieke DOM)
 
-- [ ] **R4.1** `AuthCard.vue` (kop met eyebrow + `Lijstjes` + vinkje) — viermaal gedupliceerd in Login/Register/Verify/Reset. — _code af, tests groen; wacht op browsercheck gebruiker_
-- [ ] **R4.2** `PasswordInput.vue` (veld + oog-toggle) — gedupliceerd in Login/Register/Reset. — _code af, tests groen; wacht op browsercheck gebruiker_
-- [ ] **R4.3** Iconen (`IconDragHandle`, `IconTrash`) gedeeld tussen `HomeView` en `ListDetailView`. — _code af, tests groen; wacht op browsercheck gebruiker_
+- [x] **R4.1** `AuthCard.vue` (kop met eyebrow + `Lijstjes` + vinkje) — viermaal gedupliceerd in Login/Register/Verify/Reset. — _code af, tests groen; wacht op browsercheck gebruiker_ — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
+- [x] **R4.2** `PasswordInput.vue` (veld + oog-toggle) — gedupliceerd in Login/Register/Reset. — _code af, tests groen; wacht op browsercheck gebruiker_ — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
+- [x] **R4.3** Iconen (`IconDragHandle`, `IconTrash`) gedeeld tussen `HomeView` en `ListDetailView`. — _code af, tests groen; wacht op browsercheck gebruiker_ — _Akkoord gebruiker: webversie goedgekeurd (2026-11-02)._
 
 ## Bewust buiten scope (vereist visuele controle door de gebruiker)
 
