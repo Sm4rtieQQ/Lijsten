@@ -223,7 +223,12 @@ async function testOutboxPerEntityNoBulkWipe(): Promise<void> {
     [
       entry({ type: "list.create", listId: "L1", title: "Boodschappen" }),
       entry({ type: "item.create", item: i1 }),
-      entry({ type: "item.update", item: { ...i1, done: true } }),
+      // Een al bestaand item (I3): een update van I1 zelf zou nu met de
+      // create worden samengevoegd (§7.3, zie testCompactionBeforeFlush).
+      entry({
+        type: "item.update",
+        item: { ...item("I3", "L1", "brood"), done: true },
+      }),
       entry({ type: "item.delete", itemId: "I2", listId: "L1" }),
       entry({ type: "list.delete", listId: "L1" }),
     ],
@@ -474,6 +479,83 @@ async function testReorderOperations(): Promise<void> {
 // 8. pull sorteert lijsten op position (created_at als tiebreak)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Samenvoegen vóór het versturen (§7.3)
+// ---------------------------------------------------------------------------
+
+async function testCompactionBeforeFlush(): Promise<void> {
+  const mem = memoryStorage();
+  const faux = makeFauxClient();
+  const i1 = item("I1", "L1", "melk");
+  const i2 = item("I2", "L1", "brood");
+
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "item.create", item: i1 }),
+      entry({ type: "item.update", item: { ...i1, done: true } }),
+      entry({
+        type: "item.update",
+        item: { ...i1, done: true, text: "havermelk" },
+      }),
+      entry({ type: "item.create", item: i2 }),
+      entry({ type: "item.delete", itemId: "I2", listId: "L1" }),
+      entry({ type: "item.reorder", listId: "L1", itemIds: ["I1"] }),
+      entry({ type: "item.reorder", listId: "L1", itemIds: ["I1"] }),
+    ],
+    mem,
+  );
+
+  const result = await flushOutbox("userA", client(faux.backend), mem);
+  assert(result.ok, "samengevoegde flush slaagt");
+  assert(
+    result.syncedCount === 2,
+    `2 operaties na samenvoegen (kreeg ${result.syncedCount})`,
+  );
+
+  const ops = faux.calls.map((c) => `${c.op}:${c.table}`);
+  assert(
+    JSON.stringify(ops) ===
+      JSON.stringify(["insert:list_items", "update:list_items"]),
+    `één insert met de eindstand + één reorder (kreeg: ${ops.join(", ")})`,
+  );
+  const inserted = faux.calls[0]?.row as { text?: string; done?: boolean };
+  assert(
+    inserted.text === "havermelk" && inserted.done === true,
+    "de insert bevat de laatste tekst en status",
+  );
+  assert(
+    !faux.calls.some((c) => c.op === "delete"),
+    "aangemaakt én verwijderd item komt nooit op de server",
+  );
+  assert(
+    loadQueue("userA", mem).length === 0,
+    "outbox leeg na samenvoegen + flush",
+  );
+
+  // Een gefaalde create (kan na een timeout tóch op de server staan) wordt
+  // niet samengevoegd: de delete blijft en gaat mee.
+  const mem2 = memoryStorage();
+  const faux2 = makeFauxClient();
+  saveQueue(
+    "userA",
+    [
+      {
+        ...entry({ type: "item.create", item: i2 }),
+        attempts: 1,
+        lastError: "x",
+      },
+      entry({ type: "item.delete", itemId: "I2", listId: "L1" }),
+    ],
+    mem2,
+  );
+  await flushOutbox("userA", client(faux2.backend), mem2);
+  assert(
+    faux2.calls.map((c) => c.op).join(",") === "insert,delete",
+    "gefaalde create blijft staan; de delete gaat mee",
+  );
+}
+
 async function testPullOrder(): Promise<void> {
   const faux = makeFauxClient({
     selectData: [
@@ -548,6 +630,7 @@ async function main(): Promise<void> {
   testBackoff();
   await testReorderOperations();
   await testPullOrder();
+  await testCompactionBeforeFlush();
   testExactTitleMatch();
 
   console.log(

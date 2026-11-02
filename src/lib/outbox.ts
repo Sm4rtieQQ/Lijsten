@@ -1,5 +1,106 @@
-import type { OutboxEntry, OutboxOpPayload } from "../types/sync";
+import {
+  hasFailed,
+  type OutboxEntry,
+  type OutboxOpPayload,
+} from "../types/sync";
 import { createId } from "./utils";
+
+/**
+ * Voegt wachtende operaties samen vlak vóór het versturen (§7.3), zodat er
+ * minder requests nodig zijn. FIFO en afhankelijkheden blijven kloppen:
+ *
+ * - item aangemaakt, daarna gewijzigd → één `item.create` met de eindstand;
+ * - item meerdere keren gewijzigd → alleen de laatste `item.update`;
+ * - item aangemaakt en weer verwijderd → beide weg (de server zag het nooit);
+ * - lijst aangemaakt en hernoemd → één `list.create` met de laatste titel;
+ *   meerdere `list.update` → alleen de laatste;
+ * - meerdere `item.reorder` van één lijst / meerdere `list.reorder` → alleen
+ *   de laatste, op de plek van de laatste (dus ná de creates die hij noemt).
+ *
+ * Alleen operaties die **nog nooit geprobeerd** zijn worden samengevoegd of
+ * geschrapt. Een gefaalde operatie kan na een timeout tóch op de server zijn
+ * aangekomen; die blijft daarom ongemoeid en niets wordt erin opgevouwen.
+ * Puur: de invoer wordt niet gewijzigd.
+ */
+export function compactOutbox(queue: readonly OutboxEntry[]): OutboxEntry[] {
+  const out: (OutboxEntry | null)[] = [];
+  const fresh = (entry: OutboxEntry | null | undefined): boolean =>
+    !!entry && !hasFailed(entry);
+  /** Index in `out` van de laatste nog niet geprobeerde operatie met deze sleutel. */
+  const last = new Map<string, number>();
+
+  const remember = (key: string, entry: OutboxEntry): void => {
+    last.set(key, out.length);
+    out.push(entry);
+  };
+  const lookup = (key: string): number | undefined => {
+    const index = last.get(key);
+    return index !== undefined && fresh(out[index]) ? index : undefined;
+  };
+  const drop = (key: string): void => {
+    const index = lookup(key);
+    if (index !== undefined) out[index] = null;
+    last.delete(key);
+  };
+
+  for (const entry of queue) {
+    if (!fresh(entry)) {
+      out.push(entry); // gefaald: precies zo laten staan
+      continue;
+    }
+    switch (entry.type) {
+      case "item.create":
+        remember(`item.create:${entry.item.id}`, entry);
+        break;
+      case "item.update": {
+        const created = lookup(`item.create:${entry.item.id}`);
+        const target = created !== undefined ? out[created] : null;
+        if (target?.type === "item.create") {
+          out[created!] = { ...target, item: entry.item };
+          break;
+        }
+        drop(`item.update:${entry.item.id}`);
+        remember(`item.update:${entry.item.id}`, entry);
+        break;
+      }
+      case "item.delete": {
+        drop(`item.update:${entry.itemId}`);
+        if (lookup(`item.create:${entry.itemId}`) !== undefined) {
+          drop(`item.create:${entry.itemId}`);
+          break; // nooit op de server geweest: niets te verwijderen
+        }
+        out.push(entry);
+        break;
+      }
+      case "list.create":
+        remember(`list.create:${entry.listId}`, entry);
+        break;
+      case "list.update": {
+        const created = lookup(`list.create:${entry.listId}`);
+        const target = created !== undefined ? out[created] : null;
+        if (target?.type === "list.create") {
+          out[created!] = { ...target, title: entry.title };
+          break;
+        }
+        drop(`list.update:${entry.listId}`);
+        remember(`list.update:${entry.listId}`, entry);
+        break;
+      }
+      case "item.reorder":
+        drop(`item.reorder:${entry.listId}`);
+        remember(`item.reorder:${entry.listId}`, entry);
+        break;
+      case "list.reorder":
+        drop("list.reorder");
+        remember("list.reorder", entry);
+        break;
+      default:
+        out.push(entry);
+    }
+  }
+
+  return out.filter((entry): entry is OutboxEntry => entry !== null);
+}
 
 /** Maakt van een operatie een outbox-entry (nieuw `opId`, nog niet geprobeerd). */
 export function createOutboxEntry(

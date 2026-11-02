@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { toUserFacingError } from "./errorMessages";
+import { compactOutbox } from "./outbox";
 import type { OutboxEntry } from "../types/sync";
 import type { List } from "../types/app";
 import type { Database } from "./database.types";
@@ -44,7 +45,12 @@ export async function flushOutbox(
   client: SupabaseClient<Database>,
   backend: StorageBackend,
 ): Promise<FlushResult> {
-  const queue = loadQueue(userId, backend);
+  const stored = loadQueue(userId, backend);
+  // Wachtende operaties eerst samenvoegen (§7.3): minder requests. De
+  // samengevoegde wachtrij wordt meteen opgeslagen, zodat een afgebroken run
+  // niet opnieuw met de oude, langere wachtrij begint.
+  const queue = compactOutbox(stored);
+  if (queue.length !== stored.length) saveQueue(userId, queue, backend);
   if (queue.length === 0) {
     return { ok: true, error: null, syncedCount: 0, queuedCount: 0, queue };
   }

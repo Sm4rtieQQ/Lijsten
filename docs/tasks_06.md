@@ -57,7 +57,7 @@
 
 ## V2 — Wachtende wijzigingen samenvoegen
 
-- [ ] **V2.1** Pure `compactOutbox(queue)` in `lib/outbox.ts`, toegepast vlak
+- [x] **V2.1** Pure `compactOutbox(queue)` in `lib/outbox.ts`, toegepast vlak
       vóór het versturen. FIFO en afhankelijkheden blijven kloppen:
   - item aangemaakt en daarna gewijzigd → één `item.create` met de eindstand;
   - item meerdere keren gewijzigd → alleen de laatste `item.update`;
@@ -66,12 +66,13 @@
     meerdere `list.update` → alleen de laatste;
   - meerdere `item.reorder` van dezelfde lijst / meerdere `list.reorder` →
     alleen de laatste (op de plek van de laatste, ná de creates).
-- [ ] **V2.2** Al gefaalde operaties behouden hun `attempts`/`lastError`
+- [x] **V2.2** Al gefaalde operaties behouden hun `attempts`/`lastError`
       (samengevoegd: het hoogste aantal pogingen).
-- [ ] **V2.3** Tests in vitest én `scripts/verify-data-layer.ts`
+      _Uitvoering (strenger): alleen nog nooit geprobeerde operaties worden samengevoegd; een gefaalde operatie kan na een timeout tóch op de server staan en blijft ongemoeid, er wordt ook niets in opgevouwen._
+- [x] **V2.3** Tests in vitest én `scripts/verify-data-layer.ts`
       (`npm run verify:data`): elke regel, volgorde, idempotentie, geen
       operatie van een andere lijst geraakt.
-- [ ] Commit + AGENTS.md §7.3.
+- [x] Commit + AGENTS.md §7.3.
 
 ## V3 — Minder requests per keer versturen
 
@@ -97,7 +98,7 @@
       `reorder_lists(p_list_ids uuid[])`, beide `language sql`,
       **`security invoker`** (de bestaande RLS-regels gelden: eigen lijsten,
       bevestigd e-mailadres), `set search_path = public`; één `UPDATE … FROM
-  unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
+unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
       `public`/`anon`, `grant execute` aan `authenticated`.
       `reorder_lists` filtert ook expliciet op `owner_id = auth.uid()` (§7.1).
 - [ ] **V4.2** **Uitvoeren in de SQL Editor van Supabase — door de gebruiker**
