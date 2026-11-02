@@ -100,6 +100,7 @@ Lijsten/
 │   │   ├── useLists.ts
 │   │   ├── useSync.ts
 │   │   ├── useArmedConfirm.ts    # Twee-staps bevestiging (§8.6)
+│   │   ├── useBackNavigation.ts  # Android-terugknop: handler-stapel + minimize (§8.13)
 │   │   ├── useDeepLink.ts        # Deep link: bevestiging + herstel (§8.11)
 │   │   └── *.spec.ts
 │   ├── pwa/
@@ -333,11 +334,14 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Iconen:** de PNG's zijn gerasterd uit `public/icons/icon.svg` en `icon-maskable.svg` (ImageMagick). Wijzig de SVG en raster opnieuw; bewerk de PNG's niet met de hand.
 - **Testen:** Firefox is bruikbaar om de webapp te testen, maar installeert geen PWA. Gebruik Chrome (desktop/Android) of Safari (iOS). `npm run preview:host` toont de build op je telefoon via het LAN (http → alleen lay-out; voor de echte installatie is HTTPS nodig).
 
-### 8.13 Navigatie: laatst bezochte pagina
+### 8.13 Navigatie: laatst bezochte pagina en terugknop
 
 - De app onthoudt per gebruiker de **laatst bezochte pagina**: het overzicht of een open lijst (`lijstjes:view:<userId>`, gezet door `setActiveList`). Bij opstarten, terugkeren naar de app/het tabblad en na synchroniseren blijft de gebruiker op die pagina.
 - Bestaat de onthouden lijst niet meer (lokaal verwijderd, of op een ander apparaat en binnengehaald door een pull), dan valt de app terug op het **overzicht**.
 - **Reageer in `App.vue` op het `user.id`, nooit op het `user`-object.** supabase-js vuurt bij elke terugkeer `SIGNED_IN`/`TOKEN_REFRESHED` met een nieuw object voor dezelfde gebruiker. Opnieuw hydrateren daarop toont het laadscherm en zette de app vroeger terug op het overzicht. Alleen een **andere** gebruiker (of uitloggen) reset en hydrateert.
+- **Android-terugknop sluit de app nooit.** `App.vue` koppelt native `App.addListener("backButton", …)` via `useBackNavigation` (opruimen in `onBeforeUnmount`). Volgorde: (1) open dialoog sluiten (nieuw lijstje, verwijderbevestiging), (2) accountmenu sluiten of item-bewerken annuleren, (3) detailweergave → overzicht, (4) registratie-/verificatie-/herstelscherm → inloggen, (5) overzicht of inlogscherm → `App.minimizeApp()` (naar het Android-startscherm; de app blijft draaien).
+- Schermen en dialogen registreren een handler met `registerBackHandler(fn)` in hun eigen `onMounted` en melden zich af in `onBeforeUnmount` (§5). Een handler geeft `true` terug als hij de terugknop heeft afgehandeld; de nieuwste handler gaat voor. De auth-schermen lopen via de fallback in `App.vue` (zelfde volgorde als de view-keuze).
+- In de browser bestaat de terugknop niet; daar sluit **ESC** dialogen en het menu.
 
 ## 9. Stijl, conventies & kwaliteit
 

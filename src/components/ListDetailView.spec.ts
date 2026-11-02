@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 
 import ListDetailView from "./ListDetailView.vue";
+import { handleBack } from "../composables/useBackNavigation";
 import { useLists } from "../composables/useLists";
 import { createList, createListItem, type ListItem } from "../types/app";
 
-const { lists, setActiveList } = useLists();
+const { lists, activeListId, setActiveList } = useLists();
 
 /** Zet één lijst met de gegeven items klaar en opent die als actieve lijst. */
 function seed(items: ListItem[]): void {
@@ -68,6 +69,33 @@ describe("ListDetailView (clear-knop, AGENTS.md §8.6)", () => {
     expect(clear.attributes("aria-label")).toBe(
       "Bevestigen: afgevinkte items verwijderen",
     );
+  });
+});
+
+describe("ListDetailView — Android-terugknop (AGENTS.md §8.13)", () => {
+  let wrapper: VueWrapper | undefined;
+  afterEach(() => {
+    wrapper?.unmount();
+    lists.value = [];
+    setActiveList(null);
+  });
+
+  it("annuleert eerst het bewerken, gaat daarna naar het overzicht", async () => {
+    seed([item("Melk", false)]);
+    wrapper = mount(ListDetailView);
+    await wrapper.get(".edit-button").trigger("click");
+    expect(wrapper.find("input.item-text").exists()).toBe(true);
+
+    expect(handleBack()).toBe(true);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("input.item-text").exists()).toBe(false);
+    expect(activeListId.value).not.toBeNull();
+
+    expect(handleBack()).toBe(true);
+    expect(activeListId.value).toBeNull();
+
+    // Op het overzicht handelt de detailweergave niets meer af.
+    expect(handleBack()).toBe(false);
   });
 });
 

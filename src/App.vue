@@ -9,6 +9,10 @@ import ResetPasswordView from "./components/ResetPasswordView.vue";
 import SplashView from "./components/SplashView.vue";
 import VerifyEmailView from "./components/VerifyEmailView.vue";
 import { useAuth } from "./composables/useAuth";
+import {
+  disposeBackButton,
+  initBackButton,
+} from "./composables/useBackNavigation";
 import { initDeepLink, useDeepLink } from "./composables/useDeepLink";
 import { useLists } from "./composables/useLists";
 import { bindSyncUser } from "./composables/useSync";
@@ -162,9 +166,33 @@ function onVisibilityChange(): void {
   }, 800);
 }
 
+/**
+ * Terugknop die geen scherm of dialoog afhandelde (§8.13): de auth-schermen
+ * gaan terug naar inloggen, in dezelfde volgorde als de view-keuze hieronder.
+ * `false` = niets te doen; dan gaat de app naar het Android-startscherm.
+ */
+function onUnhandledBack(): boolean {
+  if (showSplash.value) return false;
+  if (recovery.value) {
+    recovery.value = false;
+    return true;
+  }
+  if (user.value) return false;
+  if (verificationEmail.value) {
+    verificationEmail.value = null;
+    return true;
+  }
+  if (registerOpen.value) {
+    registerOpen.value = false;
+    return true;
+  }
+  return false;
+}
+
 onMounted(() => {
   // Eén plek die de auth initialiseert (A2.2): de composable blijft testbaar.
   void init();
+  void initBackButton(onUnhandledBack);
   // Deep link + webvariant van bevestiging en herstel (AGENTS.md §8.11).
   // `useDeepLink()` registreert de opruiming van de `appUrlOpen`-listener.
   useDeepLink();
@@ -173,6 +201,7 @@ onMounted(() => {
   startMinSplashTimer();
 });
 onBeforeUnmount(() => {
+  disposeBackButton();
   document.removeEventListener("visibilitychange", onVisibilityChange);
   if (pullTimer) clearTimeout(pullTimer);
   if (verifiedTimer) {

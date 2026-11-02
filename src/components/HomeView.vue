@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { useAuth } from "../composables/useAuth";
+import { registerBackHandler } from "../composables/useBackNavigation";
 import { useLists } from "../composables/useLists";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.vue";
 import IconDragHandle from "./icons/IconDragHandle.vue";
@@ -11,8 +12,14 @@ import { moveId } from "../lib/utils";
 import type { List } from "../types/app";
 
 const { user, signOut } = useAuth();
-const { lists, setActiveList, createNewList, reorderLists, deleteList } =
-  useLists();
+const {
+  lists,
+  activeListId,
+  setActiveList,
+  createNewList,
+  reorderLists,
+  deleteList,
+} = useLists();
 
 const accountOpen = ref(false);
 const accountRef = ref<HTMLElement | null>(null);
@@ -39,13 +46,30 @@ function onDocumentKeydown(event: KeyboardEvent): void {
     accountButtonRef.value?.focus();
   }
 }
+/** Android-terugknop (§8.13): eerst de dialoog, dan het menu. */
+function onBack(): boolean {
+  if (activeListId.value) return false; // het overzicht is niet zichtbaar
+  if (newListDialog.value?.open) {
+    closeNewListDialog();
+    return true;
+  }
+  if (accountOpen.value) {
+    accountOpen.value = false;
+    return true;
+  }
+  return false;
+}
+
+let offBack: (() => void) | null = null;
 onMounted(() => {
   document.addEventListener("click", onDocumentClick);
   document.addEventListener("keydown", onDocumentKeydown);
+  offBack = registerBackHandler(onBack);
 });
 onBeforeUnmount(() => {
   document.removeEventListener("click", onDocumentClick);
   document.removeEventListener("keydown", onDocumentKeydown);
+  offBack?.();
 });
 
 function toggleAccount(): void {

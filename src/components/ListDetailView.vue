@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 
 import { useArmedConfirm } from "../composables/useArmedConfirm";
+import { registerBackHandler } from "../composables/useBackNavigation";
 import { useLists } from "../composables/useLists";
 import IconDragHandle from "./icons/IconDragHandle.vue";
 import IconTrash from "./icons/IconTrash.vue";
@@ -64,7 +72,22 @@ function clearCompletedItems(): void {
   if (id) clearCompleted(id);
 }
 
-onBeforeUnmount(dispose);
+/** Android-terugknop (§8.13): eerst bewerken annuleren, dan naar het overzicht. */
+function onBack(): boolean {
+  if (!activeListId.value) return false;
+  if (editingItemId.value) cancelEdit();
+  else goBack();
+  return true;
+}
+
+let offBack: (() => void) | null = null;
+onMounted(() => {
+  offBack = registerBackHandler(onBack);
+});
+onBeforeUnmount(() => {
+  dispose();
+  offBack?.();
+});
 
 // Bij schakelen naar een andere lijst alle lokale edit/drag-state resetten.
 watch(activeListId, () => {

@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 
 import HomeView from "./HomeView.vue";
 import { useAuth } from "../composables/useAuth";
+import { handleBack } from "../composables/useBackNavigation";
 
 const AUTH = useAuth();
 
@@ -60,5 +61,29 @@ describe("HomeView (accountmenu, AGENTS.md §8.8)", () => {
     await button.trigger("click");
     expect(button.classes()).not.toContain("is-active");
     expect(wrapper.get(".account-panel").attributes("hidden")).toBeDefined();
+  });
+});
+
+describe("HomeView — Android-terugknop (AGENTS.md §8.13)", () => {
+  let wrapper: VueWrapper | undefined;
+  afterEach(() => wrapper?.unmount());
+
+  it("sluit eerst het open accountmenu; daarna laat hij het door", async () => {
+    wrapper = mount(HomeView);
+    await wrapper.get(".icon-button").trigger("click");
+
+    expect(handleBack()).toBe(true);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".account-panel").attributes("hidden")).toBeDefined();
+
+    // Niets meer open → niet afgehandeld (App minimaliseert dan de app).
+    expect(handleBack()).toBe(false);
+  });
+
+  it("meldt zich af bij unmount", () => {
+    wrapper = mount(HomeView);
+    wrapper.unmount();
+    wrapper = undefined;
+    expect(handleBack()).toBe(false);
   });
 });

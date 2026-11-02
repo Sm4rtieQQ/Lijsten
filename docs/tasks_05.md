@@ -63,19 +63,19 @@ Gedrag van de terugknop, in volgorde van prioriteit:
 5. Overzicht of inlogscherm → `App.minimizeApp()`: de app gaat naar het
    Android-startscherm maar **blijft draaien** (wordt niet afgesloten).
 
-- [ ] **N2.1** `composables/useBackNavigation.ts`: een stapel terug-handlers
+- [x] **N2.1** `composables/useBackNavigation.ts`: een stapel terug-handlers
       (laatst geregistreerd = eerst aan de beurt). Componenten registreren in
       `onMounted`/bij openen en ruimen op in `onBeforeUnmount`/bij sluiten (§5).
       `handleBack(): boolean` → `false` als niemand het afhandelt.
-- [ ] **N2.2** `App.vue`: op native `App.addListener("backButton", …)` →
+- [x] **N2.2** `App.vue`: op native `App.addListener("backButton", …)` →
       `handleBack()` of anders `App.minimizeApp()`. Listener opruimen in
       `onBeforeUnmount` (zelfde patroon als `useDeepLink`).
-- [ ] **N2.3** Registraties in `HomeView` (menu, dialogen), `ConfirmDeleteDialog`,
-      `ListDetailView` (bewerken, terug naar overzicht) en de auth-schermen.
-- [ ] **N2.4** Web: de logica wordt getest via vitest (mock `@capacitor/app`);
+- [x] **N2.3** Registraties in `HomeView` (menu, dialogen), `ConfirmDeleteDialog`,
+      `ListDetailView` (bewerken, terug naar overzicht) en de auth-schermen. _Uitvoering: de auth-schermen lopen via de fallback in `App.vue` in plaats van een eigen registratie (zelfde volgorde als de view-keuze)._
+- [x] **N2.4** Web: de logica wordt getest via vitest (mock `@capacitor/app`);
       in de browser blijft ESC het equivalent voor dialogen/menu.
-- [ ] **N2.5** Tests: volgorde van de stapel, opruimen, fallback naar minimize.
-- [ ] Commit + AGENTS.md §8.13.
+- [x] **N2.5** Tests: volgorde van de stapel, opruimen, fallback naar minimize.
+- [x] Commit + AGENTS.md §8.13.
 
 ## N3 — Volledige sync via de pill (en één sync-functie)
 

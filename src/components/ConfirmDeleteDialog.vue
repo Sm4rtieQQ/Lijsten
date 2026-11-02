@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
+import { registerBackHandler } from "../composables/useBackNavigation";
 import { isExactTitleMatch } from "../lib/utils";
 import type { List } from "../types/app";
 
@@ -12,12 +13,19 @@ const error = ref<string | null>(null);
 const dialogEl = ref<HTMLDialogElement | null>(null);
 const inputEl = ref<HTMLInputElement | null>(null);
 
+// Android-terugknop sluit de dialoog zonder actie, net als ESC (§8.13).
+let offBack: (() => void) | null = null;
 onMounted(() => {
+  offBack = registerBackHandler(() => {
+    onCancel();
+    return true;
+  });
   nextTick(() => {
     dialogEl.value?.showModal();
     inputEl.value?.focus();
   });
 });
+onBeforeUnmount(() => offBack?.());
 
 // Inline foutmelding wissen zodra de gebruiker iets typt.
 watch(input, () => {
