@@ -1,7 +1,7 @@
 -- Volgorde opslaan in één request (AGENTS.md §7.3, fase 9 / V4).
 --
 -- Voer dit script uit in de SQL Editor van je Supabase-project, ná
--- supabase-schema.sql en supabase-verification.sql. Het is idempotent: veilig
+-- supabase/schema.sql en supabase/verification.sql. Het is idempotent: veilig
 -- om opnieuw uit te voeren.
 --
 -- Zonder dit script werkt de app ook: dan valt hij terug op één update per

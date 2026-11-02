@@ -94,7 +94,7 @@
 
 ## V4 — Volgorde opslaan in één request (databasefunctie)
 
-- [x] **V4.1** Nieuw `supabase-reorder.sql` (idempotent):
+- [x] **V4.1** Nieuw `supabase/reorder.sql` (idempotent):
       `reorder_items(p_list_id uuid, p_item_ids uuid[])` en
       `reorder_lists(p_list_ids uuid[])`, beide `language sql`,
       **`security invoker`** (de bestaande RLS-regels gelden: eigen lijsten,
@@ -109,7 +109,7 @@ unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
       de huidige per-item-updates. Zo werkt de app vóór én na het script.
 - [x] **V4.4** `database.types.ts`: `Functions` voor beide functies.
 - [x] **V4.5** Tests + `verify:data`: rpc-pad, terugval, fout → NL-tekst.
-- [x] Commit + AGENTS.md (§7.3, projectstructuur met `supabase-reorder.sql`).
+- [x] Commit + AGENTS.md (§7.3, projectstructuur met `supabase/reorder.sql`).
 
 ## Gevolgen (bewust)
 

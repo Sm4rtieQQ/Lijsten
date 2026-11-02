@@ -62,7 +62,7 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    /** Uit `supabase-reorder.sql` (§7.3): volgorde opslaan in één request. */
+    /** Uit `supabase/reorder.sql` (§7.3): volgorde opslaan in één request. */
     Functions: {
       reorder_items: {
         Args: { p_list_id: string; p_item_ids: string[] };

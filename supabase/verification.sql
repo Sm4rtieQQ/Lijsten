@@ -59,7 +59,7 @@ grant execute on function public.is_email_confirmed() to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 3. RLS-POLICIES OPNIEUW (met de grendel)
---    Dezelfde policies als in supabase-schema.sql, nu met
+--    Dezelfde policies als in supabase/schema.sql, nu met
 --    `and public.is_email_confirmed()` eraan vast.
 -- ---------------------------------------------------------------------------
 alter table public.lists enable row level security;

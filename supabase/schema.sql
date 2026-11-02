@@ -129,5 +129,5 @@ create policy "items_delete_own" on public.list_items
   ));
 
 -- Schakel in Authentication > Providers > Email in, zet "Confirm email" AAN en
--- kies een passend e-mailbeleid. Zie supabase-verification.sql voor de volledige
+-- kies een passend e-mailbeleid. Zie supabase/verification.sql voor de volledige
 -- checklist en het e-mailtemplate.

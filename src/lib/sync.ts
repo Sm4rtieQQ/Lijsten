@@ -242,7 +242,7 @@ async function guarded(
 type RawError = { message: string; code?: string } | null;
 
 /**
- * Per client: bestaan de reorder-functies uit `supabase-reorder.sql`? `false`
+ * Per client: bestaan de reorder-functies uit `supabase/reorder.sql`? `false`
  * zodra de server meldt dat ze er niet zijn; dan direct de terugval, zonder
  * eerst elke keer een mislukte aanroep. Per client (niet globaal), zodat een
  * andere client — bv. in de tests — opnieuw kijkt.

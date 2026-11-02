@@ -63,7 +63,7 @@ interface FauxClientOptions {
   /** Data die `select` teruggeeft (voor pull-tests). */
   selectData?: unknown;
   /**
-   * Bestaan de functies uit supabase-reorder.sql? Standaard niet (zoals vóór
+   * Bestaan de functies uit supabase/reorder.sql? Standaard niet (zoals vóór
    * het uitvoeren van het script): de app valt dan terug op per-item-updates.
    */
   rpcAvailable?: boolean;
@@ -520,7 +520,7 @@ async function testReorderOperations(): Promise<void> {
 
 async function testCompactionBeforeFlush(): Promise<void> {
   const mem = memoryStorage();
-  // Na het uitvoeren van supabase-reorder.sql: de reorder is één rpc-call.
+  // Na het uitvoeren van supabase/reorder.sql: de reorder is één rpc-call.
   const faux = makeFauxClient({ rpcAvailable: true });
   const i1 = item("I1", "L1", "melk");
   const i2 = item("I2", "L1", "brood");
@@ -732,7 +732,7 @@ async function testBatchedRequests(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Volgorde via de databasefunctie, met terugval (§7.3, supabase-reorder.sql)
+// Volgorde via de databasefunctie, met terugval (§7.3, supabase/reorder.sql)
 // ---------------------------------------------------------------------------
 
 async function testReorderViaRpc(): Promise<void> {

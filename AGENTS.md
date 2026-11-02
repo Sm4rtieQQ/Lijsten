@@ -71,9 +71,10 @@ Lijsten/
 ├── tsconfig.json           # Project references (app + node)
 ├── tsconfig.app.json
 ├── tsconfig.node.json
-├── supabase-schema.sql     # Schema + RLS voor lists/list_items (idem uitvoerbaar)
-├── supabase-verification.sql  # Sjabloon voor e-mailverificatie (invite eruit + RLS-grendel + beheer)
-├── supabase-reorder.sql    # Functies reorder_items/reorder_lists: volgorde in één request (§7.3)
+├── supabase/               # SQL voor de SQL Editor van Supabase, in deze volgorde uitvoeren:
+│   ├── schema.sql          # 1. Schema + RLS voor lists/list_items (idempotent)
+│   ├── verification.sql    # 2. E-mailverificatie: RLS-grendel + checklist instellingen
+│   └── reorder.sql         # 3. Functies reorder_items/reorder_lists: volgorde in één request (§7.3)
 ├── public/                 # PWA-assets: manifest.webmanifest, sw.js, icons/, favicon.svg
 ├── .github/workflows/      # CI: deploy naar GitHub Pages (deploy-pages.yml)
 ├── scripts/
@@ -165,13 +166,13 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 - **Per-user cache.** Elke `localStorage`-key is **per `userId`**: `lijstjes:data:<userId>`, `lijstjes:queue:<userId>`, `lijstjes:sync:<userId>` en `lijstjes:view:<userId>` (laatst bezochte pagina, §8.13). **Nooit** een globale key zonder userId. Bij uitloggen wordt alle state van die sessie geleegd.
 - **Server als gedeelde bron, client offline-first.** Wijzigingen gaan eerst naar de lokale cache + een operationele outbox (queue). Sync pusht de outbox naar Supabase in order.
 - **Nooit bulk-wipe naar server.** `syncToSupabase()` in de oude code deed `DELETE` van alle lijsten van de gebruiker en her-insertte alles — dat is de oorzaak van het cross-user datalek. **Deze destructieve bulk-sync wordt niet overgenomen.** Gebruik per-entiteit operaties (create/update/delete) vanuit de outbox.
-- **Defense in depth:** queries filteren **expliciet** op `owner_id = auth.uid()` waar mogelijk, en RLS blijft tweede beveiligingslaag (zoals in `supabase-schema.sql`).
+- **Defense in depth:** queries filteren **expliciet** op `owner_id = auth.uid()` waar mogelijk, en RLS blijft tweede beveiligingslaag (zoals in `supabase/schema.sql`).
 - **Cross-user isolatie:** bij wisselen van gebruiker wordt de cache van de vorige gebruiker nooit gelezen of gemengd. LocalStorage wordt per-user gescheiden.
 - **Leeg account na uitloggen:** `lists`, `activeListId`, outbox en alle per-user keys worden gewist bij `signOut()`. Geen voorbeelddata wordt automatisch geladen voor ingelogde gebruikers (zie sectie 8).
 
 ### 7.2 Database types
 
-- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties, en de functies `reorder_items`/`reorder_lists` uit `supabase-reorder.sql`). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
+- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties, en de functies `reorder_items`/`reorder_lists` uit `supabase/reorder.sql`). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
 - Het uitnodigingssysteem (`invites`, `invite_claims`, `claim_invite`) is **verwijderd**; die types bestaan niet meer.
 - Domeinmodellen (`List`, `ListItem`) in `src/types/app.ts` — gescheiden van DB-shape waar zinvol.
 
@@ -186,7 +187,7 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 - **Samenvoegen vóór het versturen** (`compactOutbox` in `lib/outbox.ts`, aangeroepen aan het begin van `flushOutbox`): item aangemaakt en daarna gewijzigd → één `item.create` met de eindstand; meerdere updates van één item → alleen de laatste; aangemaakt en weer verwijderd → beide weg; lijst aangemaakt en hernoemd → één `list.create`; meerdere reorders van één lijst (of van de lijstvolgorde) → alleen de laatste, op de plek van de laatste. **Alleen nog nooit geprobeerde operaties** worden samengevoegd of geschrapt: een gefaalde operatie kan na een timeout tóch op de server zijn aangekomen en blijft ongemoeid. De samengevoegde wachtrij wordt meteen opgeslagen.
 - **Gebundelde requests** (`nextBatch` in `lib/outbox.ts`, FIFO blijft gelden): opeenvolgende `item.create` gaan als één insert met alle rijen, opeenvolgende `item.delete` van dezelfde lijst als één `delete().in("id", ids).eq("list_id", …)` — altijd met id-filter, dus nooit een bulk-wipe. Hooguit `MAX_BATCH_SIZE` (100) per bundel; al het andere gaat alleen. Een operatie die de **server** weigerde (duplicaat, geen toegang, onbekend) gaat voortaan alleen; na een netwerkfout of timeout mag hij weer mee in een bundel. Mislukt een bundel, dan worden al zijn operaties gemarkeerd en opnieuw geprobeerd met backoff.
 - **Item toevoegen herschikt de lijst niet.** Het nieuwe item komt bovenaan met positie `bovenste positie − 1` (negatief mag; server en pull sorteren op `position`), dus alleen een `item.create` en geen `item.reorder`. Slepen nummert de lijst wel opnieuw door.
-- **Volgorde opslaan in één request:** `item.reorder` en `list.reorder` roepen de databasefuncties `reorder_items` / `reorder_lists` aan (`supabase-reorder.sql`, `security invoker`: de RLS-regels gelden onverkort). Eén statement, dus alles of niets — een verbroken verbinding laat geen half opgeslagen volgorde meer achter. Bestaan de functies (nog) niet (`PGRST202`/`42883`), dan valt de app terug op één update per item en onthoudt dat per client. Een échte fout van de functie valt **niet** terug, maar wordt gemarkeerd en opnieuw geprobeerd.
+- **Volgorde opslaan in één request:** `item.reorder` en `list.reorder` roepen de databasefuncties `reorder_items` / `reorder_lists` aan (`supabase/reorder.sql`, `security invoker`: de RLS-regels gelden onverkort). Eén statement, dus alles of niets — een verbroken verbinding laat geen half opgeslagen volgorde meer achter. Bestaan de functies (nog) niet (`PGRST202`/`42883`), dan valt de app terug op één update per item en onthoudt dat per client. Een échte fout van de functie valt **niet** terug, maar wordt gemarkeerd en opnieuw geprobeerd.
 
 ### 7.4 Sync-indicator (vereist)
 
@@ -217,13 +218,13 @@ Er is **open registratie**, maar een account is pas bruikbaar **nadat het e-mail
 
 - **Aanmelden:** `RegisterView.vue` stuurt `supabase.auth.signUp({ email, password, options: { emailRedirectTo } })`. De gebruiker kiest zelf een e-mailadres en wachtwoord (minimaal **6 tekens**); er is geen token of uitnodiging meer.
 - **Bevestigingsmail:** Supabase verstuurt de "Confirm signup"-mail met `{{ .ConfirmationURL }}`. Na signup is er **geen sessie**: de app toont `VerifyEmailView.vue` met `Er is een email verzonden naar <email>. Klik op de link in de mail om uw account te accepteren.` en een link om een **nieuwe** verificatielink op te vragen (`resendVerification`).
-- **Afdwinging gebeurt in de database**, niet in de app: de Supabase-instelling **"Confirm email" staat AAN** (inloggen zonder bevestiging wordt server-side geweigerd) én de RLS-policies van `lists`/`list_items` eisen `public.is_email_confirmed()` (in `supabase-verification.sql`). Een sessie zonder bevestiging kan dus niets lezen of schrijven.
+- **Afdwinging gebeurt in de database**, niet in de app: de Supabase-instelling **"Confirm email" staat AAN** (inloggen zonder bevestiging wordt server-side geweigerd) én de RLS-policies van `lists`/`list_items` eisen `public.is_email_confirmed()` (in `supabase/verification.sql`). Een sessie zonder bevestiging kan dus niets lezen of schrijven.
 - **Bevestigingslink:** `emailRedirectTo` is native `com.lijstjes.app://` en op het web de volledige pagina-URL (`origin` **plus** `pathname`), zodat het ook onder een subpad zoals de GitHub Pages-projectpagina `/Lijsten/` klopt (zie §10.3). De link logt de gebruiker **automatisch in**; de app toont daarna een kleine **groene bevestiging**.
 - **Verificatietokens** (in de URL-hash) worden niet gelogd, niet in `localStorage` bewaard en niet in de UI of in foutmeldingen getoond; ze worden meteen uit de URL gehaald (`history.replaceState`).
-- **Het uitnodigingssysteem is volledig verwijderd:** geen `invites`/`invite_claims`, geen `claim_invite`, geen `enforce_invite_on_signup`-trigger en geen `com.lijstjes.app://invite` deep link. De oude `supabase-invites.sql` is vervangen door `supabase-verification.sql`.
+- **Het uitnodigingssysteem is volledig verwijderd:** geen `invites`/`invite_claims`, geen `claim_invite`, geen `enforce_invite_on_signup`-trigger en geen `com.lijstjes.app://invite` deep link. De oude `supabase-invites.sql` is vervangen door `supabase/verification.sql`.
 - **Geen eigen SMTP-provider.** Bewust besluit: de bevestigings- en herstelmail gaan via de standaardaflevering van Supabase, met een harde limiet van enkele mails per uur en een kans op spam. De mail kan dus uitblijven. De UI meldt dit zonder technische termen als "rate limit" of "SMTP"; de resend-knop heeft een **cooldown van 60 seconden**.
 - **Registratie staat bewust UIT** (besluit gebruiker, 2026-11-02): "Allow new users to sign up" is uitgeschakeld, zodat er voorlopig geen nieuwe accounts bij komen. De registratiecode blijft staan; een poging geeft `Nieuwe accounts aanmaken is op dit moment niet mogelijk.` (`SIGNUP_DISABLED`). Zet de instelling **niet** zelf aan; dat is een keuze van de gebruiker.
-- **Supabase-instellingen** (nodig voor het functioneren): Email-provider aan, "Allow new users to sign up" **uit** (zie hierboven; aan zodra registratie weer open moet), "Confirm email" **aan**. Site URL en Redirect URLs staan op **`com.lijstjes.app://`** — het app-schema, **geen** webadres: de app draait als Android-app zonder webhost. Voor webtesten staat `http://localhost:5173` er ook bij. De volledige checklist staat in `supabase-verification.sql`.
+- **Supabase-instellingen** (nodig voor het functioneren): Email-provider aan, "Allow new users to sign up" **uit** (zie hierboven; aan zodra registratie weer open moet), "Confirm email" **aan**. Site URL en Redirect URLs staan op **`com.lijstjes.app://`** — het app-schema, **geen** webadres: de app draait als Android-app zonder webhost. Voor webtesten staat `http://localhost:5173` er ook bij. De volledige checklist staat in `supabase/verification.sql`.
 
 ## 8. Functiespecificaties
 

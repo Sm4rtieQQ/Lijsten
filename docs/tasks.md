@@ -26,7 +26,7 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 - [x] Destructieve bulk-sync (`DELETE` alles + her-insert) verwijderen en vervangen door **outbox met per-entiteit operaties**
 - [x] Uitloggen-wachtrij: failed operaties met `error` + `attempts` bijhouden, retry met backoff onderbouwen
 - [x] `npm run verify:data` (`scripts/verify-data-layer.ts`): geautomatiseerde checks voor per-user isolatie, geen bulk-wipe, FIFO outbox, retry/backoff, reorder-operaties en titelvalidatie (52 checks groen)
-- [x] Supabase RLS-beleid in `supabase-schema.sql` verifiëren/aanvullen — **schema is bijgewerkt** (gesplitste policies per operatie, `position`-kolom op `lists`, indexen); **nog uitvoeren in de SQL Editor van het Supabase-project** — **Uitgevoerd** (gecontroleerd 2026-11-02: kolom `lists.position` en `is_email_confirmed()` bestaan in de database).
+- [x] Supabase RLS-beleid in `supabase/schema.sql` verifiëren/aanvullen — **schema is bijgewerkt** (gesplitste policies per operatie, `position`-kolom op `lists`, indexen); **nog uitvoeren in de SQL Editor van het Supabase-project** — **Uitgevoerd** (gecontroleerd 2026-11-02: kolom `lists.position` en `is_email_confirmed()` bestaan in de database).
 - [x] Handleiding testen: inloggen als user A → data aanmaken → uitloggen → inloggen als user B → **geen** data van A zichtbaar; ook bij netwerkfout mag geen data van A getoond worden (vereist browser + 2 accounts; logica al gedekt door `verify:data`) — **Getest** samen met de handmatige test van fase 3 (akkoord gebruiker) en opnieuw in poort H2 (`task_02.md`).
 
 ## Fase 3 — Features (web-only)
