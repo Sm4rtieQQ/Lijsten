@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 
+import AuthCard from "./AuthCard.vue";
 import { useAuth } from "../composables/useAuth";
 
 const emit = defineEmits<{ back: [] }>();
@@ -64,45 +65,35 @@ onBeforeUnmount(stopCooldown);
 </script>
 
 <template>
-  <section class="view active">
-    <div class="login-card">
-      <div class="login-title">
-        <div>
-          <p class="eyebrow">BEVESTIG JE E-MAIL</p>
-          <h1>Lijstjes</h1>
-        </div>
-        <div class="app-mark">&#10003;</div>
-      </div>
+  <AuthCard eyebrow="BEVESTIG JE E-MAIL">
+    <p class="login-copy">{{ notice }}</p>
 
-      <p class="login-copy">{{ notice }}</p>
+    <p class="login-note">
+      De mail kan even op zich laten wachten of in de spam belanden. Komt er
+      niets aan? Vraag hieronder een nieuwe link aan.
+    </p>
 
-      <p class="login-note">
-        De mail kan even op zich laten wachten of in de spam belanden. Komt er
-        niets aan? Vraag hieronder een nieuwe link aan.
-      </p>
+    <button
+      class="button-secondary verify-resend"
+      type="button"
+      :disabled="busy || cooldown > 0"
+      @click="onResend"
+    >
+      {{
+        cooldown > 0
+          ? `Opnieuw mogelijk over ${cooldown}s`
+          : "Nieuwe verificatielink opvragen"
+      }}
+    </button>
 
-      <button
-        class="button-secondary verify-resend"
-        type="button"
-        :disabled="busy || cooldown > 0"
-        @click="onResend"
-      >
-        {{
-          cooldown > 0
-            ? `Opnieuw mogelijk over ${cooldown}s`
-            : "Nieuwe verificatielink opvragen"
-        }}
-      </button>
+    <p class="login-message" aria-live="polite">{{ message }}</p>
 
-      <p class="login-message" aria-live="polite">{{ message }}</p>
-
-      <button
-        class="text-button forgot-password"
-        type="button"
-        @click="emit('back')"
-      >
-        Terug naar inloggen
-      </button>
-    </div>
-  </section>
+    <button
+      class="text-button forgot-password"
+      type="button"
+      @click="emit('back')"
+    >
+      Terug naar inloggen
+    </button>
+  </AuthCard>
 </template>

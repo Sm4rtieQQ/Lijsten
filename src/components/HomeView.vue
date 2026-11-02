@@ -4,7 +4,10 @@ import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useAuth } from "../composables/useAuth";
 import { useLists } from "../composables/useLists";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.vue";
+import IconDragHandle from "./icons/IconDragHandle.vue";
+import IconTrash from "./icons/IconTrash.vue";
 import SyncIndicator from "./SyncIndicator.vue";
+import { moveId } from "../lib/utils";
 import type { List } from "../types/app";
 
 const { user, signOut } = useAuth();
@@ -113,17 +116,14 @@ function onListDrop(targetId: string): void {
   const from = draggingListId.value;
   draggingListId.value = null;
   dragOverListId.value = null;
-  if (!from || from === targetId) return;
+  if (!from) return;
 
-  const ids = lists.value.map((list) => list.id);
-  const fromIndex = ids.indexOf(from);
-  const toIndex = ids.indexOf(targetId);
-  if (fromIndex === -1 || toIndex === -1) return;
-  const next = [...ids];
-  const [moved] = next.splice(fromIndex, 1);
-  if (!moved) return;
-  next.splice(toIndex, 0, moved);
-  reorderLists(next);
+  const next = moveId(
+    lists.value.map((list) => list.id),
+    from,
+    targetId,
+  );
+  if (next) reorderLists(next);
 }
 </script>
 
@@ -202,14 +202,7 @@ function onListDrop(targetId: string): void {
             @keydown.stop
             @dragstart.stop="onListDragStart(list, $event)"
           >
-            <svg viewBox="0 0 16 20" aria-hidden="true">
-              <circle cx="5" cy="4" r="1.4" />
-              <circle cx="11" cy="4" r="1.4" />
-              <circle cx="5" cy="10" r="1.4" />
-              <circle cx="11" cy="10" r="1.4" />
-              <circle cx="5" cy="16" r="1.4" />
-              <circle cx="11" cy="16" r="1.4" />
-            </svg>
+            <IconDragHandle />
           </button>
           <span class="card-title">{{ list.title }}</span>
         </div>
@@ -224,9 +217,7 @@ function onListDrop(targetId: string): void {
           @click.stop="requestDelete(list)"
           @keydown.stop
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13" />
-          </svg>
+          <IconTrash />
         </button>
       </article>
     </div>

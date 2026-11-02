@@ -3,7 +3,10 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 import { useArmedConfirm } from "../composables/useArmedConfirm";
 import { useLists } from "../composables/useLists";
+import IconDragHandle from "./icons/IconDragHandle.vue";
+import IconTrash from "./icons/IconTrash.vue";
 import SyncIndicator from "./SyncIndicator.vue";
+import { moveId } from "../lib/utils";
 import type { ListItem } from "../types/app";
 
 const {
@@ -171,19 +174,15 @@ function onItemDrop(targetId: string): void {
   const from = draggingItemId.value;
   draggingItemId.value = null;
   dragOverItemId.value = null;
-  if (!id || !from || from === targetId) return;
-
   const current = list.value;
-  if (!current) return;
-  const ids = current.items.map((item) => item.id);
-  const fromIndex = ids.indexOf(from);
-  const toIndex = ids.indexOf(targetId);
-  if (fromIndex === -1 || toIndex === -1) return;
-  const next = [...ids];
-  const [moved] = next.splice(fromIndex, 1);
-  if (!moved) return;
-  next.splice(toIndex, 0, moved);
-  reorderItems(id, next);
+  if (!id || !from || !current) return;
+
+  const next = moveId(
+    current.items.map((item) => item.id),
+    from,
+    targetId,
+  );
+  if (next) reorderItems(id, next);
 }
 </script>
 
@@ -284,14 +283,7 @@ function onItemDrop(targetId: string): void {
             @click.stop
             @dragstart.stop="onItemDragStart(item, $event)"
           >
-            <svg viewBox="0 0 16 20" aria-hidden="true">
-              <circle cx="5" cy="4" r="1.4" />
-              <circle cx="11" cy="4" r="1.4" />
-              <circle cx="5" cy="10" r="1.4" />
-              <circle cx="11" cy="10" r="1.4" />
-              <circle cx="5" cy="16" r="1.4" />
-              <circle cx="11" cy="16" r="1.4" />
-            </svg>
+            <IconDragHandle />
           </button>
           <button
             class="check-button"
@@ -342,11 +334,7 @@ function onItemDrop(targetId: string): void {
             "
             @click.stop="onDeleteItem(item)"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"
-              />
-            </svg>
+            <IconTrash />
           </button>
         </li>
       </ul>
