@@ -104,6 +104,7 @@ unnest(…) WITH ORDINALITY`, dus alles-of-niets. `revoke` van
       `reorder_lists` filtert ook expliciet op `owner_id = auth.uid()` (§7.1).
 - [ ] **V4.2** **Uitvoeren in de SQL Editor van Supabase — door de gebruiker**
       (kan niet vanuit de repo), daarna testen met een eigen account.
+      _Uitgevoerd door de gebruiker; gecontroleerd 2026-11-02: beide functies bestaan en `anon` krijgt `permission denied` (42501). Nog open: een sleep met een eigen account geeft één POST naar `rpc/reorder_items`._
 - [x] **V4.3** `sync.ts`: `item.reorder`/`list.reorder` via `client.rpc(…)`.
       Bestaat de functie nog niet (PostgREST `PGRST202`/404), dan terugvallen op
       de huidige per-item-updates. Zo werkt de app vóór én na het script.
