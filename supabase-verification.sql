@@ -154,7 +154,9 @@ select routine_name
 -- CHECKLIST in Supabase (Authentication)
 --
 -- [ ] 1. Providers > Email: AAN.
--- [ ] 2. "Allow new users to sign up": AAN. (Er is geen poortwachter meer in de
+-- [ ] 2. "Allow new users to sign up": voorlopig UIT (besluit gebruiker
+--        2026-11-02: geen nieuwe accounts). AAN zodra registratie weer open
+--        moet. (Er is geen poortwachter meer in de
 --        database; de drempel is nu de e-mailbevestiging.)
 -- [ ] 3. "Confirm email": **AAN**. Dit is de kern van de nieuwe flow:
 --          - signUp geeft GEEN sessie terug;

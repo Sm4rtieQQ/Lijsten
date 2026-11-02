@@ -72,13 +72,14 @@
       `items_*`-policies in `supabase-schema.sql`. Een ongeverifieerde gebruiker kan
       daarmee niets lezen/schrijven, ook al zou er ooit een sessie bestaan.
 
-- [ ] **1.3** Supabase-instelling: **"Confirm email" AANzetten** (Authentication → Providers →
+- [x] **1.3** Supabase-instelling: **"Confirm email" AANzetten** (Authentication → Providers →
       Email). Gevolg: `signUp` geeft geen sessie terug tot de gebruiker klikt; inloggen zonder
       bevestiging wordt server-side geweigerd. `Allow new users to sign up` blijft AAN.
 
   **Gecontroleerd 2026-11-02** (`GET /auth/v1/settings`): "Confirm email" staat AAN
-  (`mailer_autoconfirm: false`), maar **"Allow new users to sign up" staat UIT**
-  (`disable_signup: true`). Daardoor werkt open registratie niet. Open tot dit weer AAN staat.
+  (`mailer_autoconfirm: false`). "Allow new users to sign up" staat **bewust UIT**
+  (`disable_signup: true`, besluit gebruiker 2026-11-02: voorlopig geen nieuwe accounts).
+  Een registratiepoging toont `Nieuwe accounts aanmaken is op dit moment niet mogelijk.`
 
 - [ ] **1.4** URL-configuratie: Site URL en Redirect URLs blijven `com.lijstjes.app://`.
       Voor webtesten (`npm run dev`) ook `http://localhost:5173` aan de Redirect URLs toevoegen.

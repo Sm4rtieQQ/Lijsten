@@ -35,6 +35,10 @@ export const DUPLICATE_ERROR = "Dit item bestaat al.";
 export const SYNC_GENERIC_ERROR =
   "Synchronisatie mislukt. Probeer het opnieuw.";
 
+/** Registreren staat in Supabase bewust uit (§7.6). */
+export const SIGNUP_DISABLED =
+  "Nieuwe accounts aanmaken is op dit moment niet mogelijk.";
+
 /** Vangnet voor onbekende auth-fouten (past beter dan de sync-tekst). */
 export const AUTH_GENERIC_ERROR = "Er ging iets mis. Probeer het opnieuw.";
 
@@ -110,6 +114,11 @@ const AUTH_RULES: readonly Rule[] = [
       "already been registered",
     ],
     message: "Er bestaat al een account met dit e-mailadres.",
+  },
+  {
+    // "Allow new users to sign up" staat bewust UIT (§7.6).
+    test: ["signup_disabled", "signups not allowed"],
+    message: SIGNUP_DISABLED,
   },
   {
     test: [
