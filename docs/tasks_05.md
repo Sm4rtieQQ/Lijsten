@@ -118,24 +118,25 @@ Gedrag van de terugknop, in volgorde van prioriteit:
 
 ## N5 — Slepen toont een zwevende kopie
 
-- [ ] **N5.1** Slepen herbouwen op **pointer-events** in plaats van HTML5-DnD:
+- [x] **N5.1** Slepen herbouwen op **pointer-events** in plaats van HTML5-DnD:
       werkt gelijk met muis en touch (Android), en geeft volledige controle
       over het sleepbeeld. Gedeelde logica in `composables/useDragReorder.ts`,
       gebruikt door `HomeView` (lijstkaarten) en `ListDetailView` (items).
-- [ ] **N5.2** Bij het oppakken (via het handvat) een **zwevende kopie** van de
+- [x] **N5.2** Bij het oppakken (via het handvat) een **zwevende kopie** van de
       hele kaart/het item: `position: fixed`, zelfde breedte, lichte schaduw en
       kanteling, volgt de vinger/muis. De originele plek blijft als
       half-transparante placeholder staan (bestaande `.dragging`-stijl); de
       oranje lijn (`.drag-over`) toont waar hij landt.
-- [ ] **N5.3** Automatisch scrollen bij de rand van het scherm; ESC of
+      _Uitvoering: de kopie is dezelfde component (`ListCard.vue`/`ItemRow.vue`, uit `HomeView`/`ListDetailView` gehaald) met `ghost`, via `Teleport`; geen gekloonde DOM-nodes. Extra: de oranje lijn staat onder het doel bij naar beneden slepen, en na een sleep wordt één klik ingeslikt._
+- [x] **N5.3** Automatisch scrollen bij de rand van het scherm; ESC of
       `pointercancel` breekt af zonder wijziging. Bij loslaten `moveId` →
       `reorderLists`/`reorderItems` (outbox ongewijzigd).
-- [ ] **N5.4** Touch: `touch-action: none` op het handvat (niet op de hele
+- [x] **N5.4** Touch: `touch-action: none` op het handvat (niet op de hele
       kaart), zodat scrollen en de swipe (N4) blijven werken.
-- [ ] **N5.5** Toegankelijkheid: het handvat blijft een knop met `aria-label`.
+- [x] **N5.5** Toegankelijkheid: het handvat blijft een knop met `aria-label`.
 - [ ] **N5.6** Tests: `useDragReorder` (doel bepalen, afbreken, resultaat naar
-      `moveId`). Handmatig met muis en met touch-emulatie.
-- [ ] Commit + AGENTS.md (§8.2/§8.6-omgeving: slepen).
+      `moveId`). Handmatig met muis en met touch-emulatie. _Tests af (useDragReorder.spec, HomeView.spec); handmatige check nog door de gebruiker._
+- [x] Commit + AGENTS.md (nieuwe §8.15 Slepen).
 
 ## N6 — Android-test (gated: pas na akkoord gebruiker op de webversie)
 

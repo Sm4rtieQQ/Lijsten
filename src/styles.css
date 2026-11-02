@@ -1291,3 +1291,47 @@ body {
     transition: none;
   }
 }
+
+/* ---------- Fase 8: slepen met een zwevende kopie (§8.15) ---------- */
+/* Op touch neemt het handvat de vinger over: geen scrollen, geen swipe. */
+.drag-handle,
+.list-drag-handle {
+  touch-action: none;
+}
+/* De oranje lijn staat waar de rij landt: naar beneden slepen → eronder. */
+.list-card.drag-over.drop-after {
+  border-top: 1px solid #ddccbfbf;
+  border-bottom: 2px solid var(--orange);
+}
+.item.drag-over.drop-after {
+  border-top: 1px solid transparent;
+  border-bottom: 2px solid var(--orange);
+}
+/* De kopie volgt de vinger/muis; geen klikdoel, boven alles. */
+.drag-ghost {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+  transform: rotate(1.5deg) scale(1.03);
+  transform-origin: 24px 50%;
+}
+.drag-ghost > .list-card,
+.drag-ghost > .item {
+  margin: 0;
+  border-color: var(--line);
+  background: var(--white);
+  box-shadow: 0 14px 30px rgba(52, 46, 42, 0.18);
+  transition: none;
+}
+.drag-ghost .list-drag-handle,
+.drag-ghost .drag-handle {
+  cursor: grabbing;
+}
+@media (prefers-reduced-motion: reduce) {
+  .drag-ghost {
+    transform: none;
+  }
+}

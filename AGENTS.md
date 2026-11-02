@@ -92,6 +92,8 @@ Lijsten/
 │   │   ├── ResetPasswordView.vue # Nieuw wachtwoord na herstel-link
 │   │   ├── HomeView.vue          # Lijstoverzicht + accountmenu
 │   │   ├── ListDetailView.vue    # Lijstweergave, items, verwijderen
+│   │   ├── ListCard.vue          # Lijstkaart (ook als zwevende kopie, §8.15)
+│   │   ├── ItemRow.vue           # Item-rij (ook als zwevende kopie, §8.15)
 │   │   ├── ConfirmDeleteDialog.vue
 │   │   ├── PullToRefresh.vue     # Swipe-omlaag-indicator + touch-listeners (§8.14)
 │   │   ├── SyncIndicator.vue
@@ -103,6 +105,7 @@ Lijsten/
 │   │   ├── useArmedConfirm.ts    # Twee-staps bevestiging (§8.6)
 │   │   ├── useBackNavigation.ts  # Android-terugknop: handler-stapel + minimize (§8.13)
 │   │   ├── usePullToRefresh.ts   # Swipe omlaag: toestandsmachine (§8.14)
+│   │   ├── useDragReorder.ts     # Slepen: pointer-events + zwevende kopie (§8.15)
 │   │   ├── useDeepLink.ts        # Deep link: bevestiging + herstel (§8.11)
 │   │   └── *.spec.ts
 │   ├── pwa/
@@ -353,6 +356,14 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Touch-events, geen pointer-events:** bij pointer-events neemt de browser het gebaar over om te scrollen (`pointercancel`). `touchmove` is niet-passief zodat de pull `preventDefault` kan doen. Alleen touch: met een muis gebeurt niets (test in Chrome DevTools met touch-emulatie).
 - Nooit starten vanaf een invoerveld, sleephandvat of dialoog, en niet tijdens een lopende sync. Omhoog bewegen is gewoon scrollen.
 - `overscroll-behavior-y: contain` op `html`/`body`, zodat Chrome/de PWA niet zelf de pagina herlaadt.
+
+### 8.15 Slepen met een zwevende kopie
+
+- Lijsten (overzicht) en items (detail) worden herschikt door het **sleephandvat** vast te pakken. Daarna volgt een **zwevende kopie** van de hele kaart of het hele item de vinger/muis (`position: fixed`, lichte kanteling en schaduw). Het origineel blijft als half-transparante placeholder staan (`.dragging`); een oranje lijn toont waar hij landt: naar beneden slepen → onder het doel (`.drop-after`), naar boven → erboven.
+- **Pointer-events, geen HTML5 drag & drop.** HTML5-DnD toont als sleepbeeld alleen het handvat en werkt op Android (touch) onbetrouwbaar. De logica staat in `useDragReorder` (sleep pas na 4 px beweging, doel via `elementFromPoint` + `data-drag-id`, automatisch scrollen bij de schermrand, ESC en `pointercancel` breken af). Bij loslaten `moveId` → `reorderLists`/`reorderItems`; de outbox is ongewijzigd (`list.reorder`/`item.reorder`).
+- De kopie is dezelfde component (`ListCard.vue` / `ItemRow.vue` met `ghost`), via `Teleport` in `<body>`, met `aria-hidden`, `inert` en `pointer-events: none` en **zonder** `data-drag-id`, zodat hij nooit als doel telt. Geen gekloonde DOM-nodes (§5).
+- `touch-action: none` staat **alleen op het handvat**: elders blijven scrollen en de swipe omlaag (§8.14) gewoon werken.
+- Na een echte sleep wordt de eerstvolgende klik ingeslikt (`SUPPRESS_CLICK_MS`), anders opent loslaten boven dezelfde kaart de lijst.
 
 ## 9. Stijl, conventies & kwaliteit
 

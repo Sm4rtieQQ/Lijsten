@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { useAuth } from "../composables/useAuth";
 import { registerBackHandler } from "../composables/useBackNavigation";
+import { useDragReorder } from "../composables/useDragReorder";
 import { useLists } from "../composables/useLists";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.vue";
-import IconDragHandle from "./icons/IconDragHandle.vue";
-import IconTrash from "./icons/IconTrash.vue";
+import ListCard from "./ListCard.vue";
 import SyncIndicator from "./SyncIndicator.vue";
-import { moveId } from "../lib/utils";
 import type { List } from "../types/app";
 
 const { user, signOut } = useAuth();
@@ -28,10 +27,6 @@ const newListTitle = ref("");
 const newListDialog = ref<HTMLDialogElement | null>(null);
 const newListInput = ref<HTMLInputElement | null>(null);
 const deleteTarget = ref<List | null>(null);
-
-// Drag & drop (lijsten herschikken)
-const draggingListId = ref<string | null>(null);
-const dragOverListId = ref<string | null>(null);
 
 function onDocumentClick(event: MouseEvent): void {
   if (accountRef.value && !accountRef.value.contains(event.target as Node)) {
@@ -114,41 +109,32 @@ async function onLogout(): Promise<void> {
   await signOut();
 }
 
-function completedText(list: List): string {
-  if (list.items.length === 0) return "Nog geen items";
-  const done = list.items.filter((item) => item.done).length;
-  return `${done} van ${list.items.length} afgevinkt`;
-}
+// --- Slepen (lijsten herschikken, §8.15): pointer-events + zwevende kopie ---
+const {
+  draggingId,
+  overId,
+  side,
+  ghost,
+  onHandlePointerDown,
+  dispose: disposeDrag,
+} = useDragReorder({
+  ids: () => lists.value.map((list) => list.id),
+  onReorder: reorderLists,
+});
+onBeforeUnmount(disposeDrag);
 
-function onListDragStart(list: List, event: DragEvent): void {
-  draggingListId.value = list.id;
-  event.dataTransfer?.setData("text/plain", list.id);
-}
-
-function onListDragEnd(): void {
-  draggingListId.value = null;
-  dragOverListId.value = null;
-}
-
-function onListDragOver(listId: string): void {
-  if (draggingListId.value && draggingListId.value !== listId) {
-    dragOverListId.value = listId;
-  }
-}
-
-function onListDrop(targetId: string): void {
-  const from = draggingListId.value;
-  draggingListId.value = null;
-  dragOverListId.value = null;
-  if (!from) return;
-
-  const next = moveId(
-    lists.value.map((list) => list.id),
-    from,
-    targetId,
-  );
-  if (next) reorderLists(next);
-}
+const draggedList = computed(() =>
+  lists.value.find((list) => list.id === draggingId.value),
+);
+const ghostStyle = computed(() =>
+  ghost.value
+    ? {
+        left: `${ghost.value.left}px`,
+        top: `${ghost.value.top}px`,
+        width: `${ghost.value.width}px`,
+      }
+    : {},
+);
 </script>
 
 <template>
@@ -198,53 +184,32 @@ function onListDrop(targetId: string): void {
     </header>
 
     <div class="list-grid">
-      <article
+      <ListCard
         v-for="list in lists"
         :key="list.id"
-        class="list-card"
-        :class="{
-          dragging: list.id === draggingListId,
-          'drag-over': list.id === dragOverListId,
-        }"
-        role="button"
-        tabindex="0"
-        :aria-label="`Lijst ${list.title} openen`"
-        @click="openList(list)"
-        @keydown.enter.prevent="openList(list)"
-        @keydown.space.prevent="openList(list)"
-        @dragend="onListDragEnd"
-        @dragover.prevent="onListDragOver(list.id)"
-        @drop.prevent="onListDrop(list.id)"
-      >
-        <div class="card-title-row">
-          <button
-            class="list-drag-handle"
-            type="button"
-            draggable="true"
-            aria-label="Sleep lijst om te verplaatsen"
-            @click.stop
-            @keydown.stop
-            @dragstart.stop="onListDragStart(list, $event)"
-          >
-            <IconDragHandle />
-          </button>
-          <span class="card-title">{{ list.title }}</span>
-        </div>
-        <span class="card-footer">
-          <span>{{ completedText(list) }}</span>
-          <span class="card-arrow">&#8594;</span>
-        </span>
-        <button
-          class="card-delete"
-          type="button"
-          :aria-label="`Lijst ${list.title} verwijderen`"
-          @click.stop="requestDelete(list)"
-          @keydown.stop
-        >
-          <IconTrash />
-        </button>
-      </article>
+        :list="list"
+        :dragging="list.id === draggingId"
+        :drop-side="list.id === overId ? side : null"
+        @open="openList(list)"
+        @delete="requestDelete(list)"
+        @handle-pointerdown="
+          (event, card) => onHandlePointerDown(list.id, event, card)
+        "
+      />
     </div>
+
+    <!-- Zwevende kopie van de gesleepte kaart (§8.15); geen klikdoel. -->
+    <Teleport to="body">
+      <div
+        v-if="ghost && draggedList"
+        class="drag-ghost"
+        :style="ghostStyle"
+        aria-hidden="true"
+        inert
+      >
+        <ListCard :list="draggedList" ghost />
+      </div>
+    </Teleport>
 
     <div v-if="lists.length === 0" class="empty-state">
       <div class="empty-icon">+</div>
