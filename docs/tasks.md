@@ -99,3 +99,4 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 
 - [ ] Fase 7 — Refactor (gedrag ongewijzigd): zie [tasks_04.md](tasks_04.md).
 - [ ] Fase 8 — Navigatie, synchroniseren en slepen: zie [tasks_05.md](tasks_05.md).
+- [ ] Fase 9 — Minder verkeer tussen app en server: zie [tasks_06.md](tasks_06.md).
