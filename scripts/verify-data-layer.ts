@@ -556,6 +556,74 @@ async function testCompactionBeforeFlush(): Promise<void> {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Wachtrij na een run: verstuurd eruit, tussendoor toegevoegd blijft
+// ---------------------------------------------------------------------------
+
+async function testFlushSettlesQueue(): Promise<void> {
+  // (a) Fout ná een geslaagde operatie: de geslaagde komt niet terug.
+  const mem = memoryStorage();
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "list.create", listId: "L1", title: "X" }),
+      entry({ type: "item.create", item: item("I1", "L1", "melk") }),
+    ],
+    mem,
+  );
+  const failing = makeFauxClient({
+    shouldFail: (call) => call.table === "list_items",
+  });
+  const first = await flushOutbox("userA", client(failing.backend), mem);
+  assert(!first.ok, "tweede operatie faalt");
+  const queued = loadQueue("userA", mem);
+  assert(
+    queued.length === 1 && queued[0]?.type === "item.create",
+    `alleen de gefaalde operatie blijft staan (kreeg: ${queued.map((e) => e.type).join(", ")})`,
+  );
+
+  const ok = makeFauxClient();
+  await flushOutbox("userA", client(ok.backend), mem);
+  assert(
+    ok.calls.map((c) => `${c.op}:${c.table}`).join(",") === "insert:list_items",
+    "de retry verstuurt de al geslaagde list.create niet opnieuw",
+  );
+
+  // (b) Een wijziging tíjdens het versturen blijft in de wachtrij.
+  const mem2 = memoryStorage();
+  saveQueue(
+    "userA",
+    [entry({ type: "list.create", listId: "L2", title: "Y" })],
+    mem2,
+  );
+  let added = false;
+  const midway = makeFauxClient({
+    shouldFail: () => {
+      if (!added) {
+        added = true;
+        const now = loadQueue("userA", mem2);
+        saveQueue(
+          "userA",
+          [...now, entry({ type: "list.update", listId: "L2", title: "Z" })],
+          mem2,
+        );
+      }
+      return false;
+    },
+  });
+  const result = await flushOutbox("userA", client(midway.backend), mem2);
+  const rest = loadQueue("userA", mem2);
+  assert(result.ok, "run slaagt");
+  assert(
+    rest.length === 1 && rest[0]?.type === "list.update",
+    "wijziging tijdens het versturen gaat niet verloren",
+  );
+  assert(
+    result.queue.length === 1,
+    "het resultaat meldt de resterende wachtrij",
+  );
+}
+
 async function testPullOrder(): Promise<void> {
   const faux = makeFauxClient({
     selectData: [
@@ -631,6 +699,7 @@ async function main(): Promise<void> {
   await testReorderOperations();
   await testPullOrder();
   await testCompactionBeforeFlush();
+  await testFlushSettlesQueue();
   testExactTitleMatch();
 
   console.log(

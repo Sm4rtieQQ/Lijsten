@@ -59,6 +59,22 @@ export async function flushOutbox(
   const done: OutboxEntry[] = [];
   let syncedCount = 0;
 
+  /**
+   * De wachtrij na deze run, opgebouwd vanuit de wachtrij zoals die **nu** is:
+   * verstuurde operaties eruit, de gefaalde bijgewerkt. Wat tijdens het
+   * versturen is toegevoegd (of weggehaald, bv. door een verwijderde lijst)
+   * blijft zo staan. Verstuurde operaties komen nooit terug in de wachtrij,
+   * anders worden ze bij de retry dubbel verstuurd.
+   */
+  const settle = (failed: OutboxEntry | null): OutboxEntry[] => {
+    const doneIds = new Set(done.map((entry) => entry.opId));
+    const next = loadQueue(userId, backend)
+      .filter((entry) => !doneIds.has(entry.opId))
+      .map((entry) => (failed && entry.opId === failed.opId ? failed : entry));
+    saveQueue(userId, next, backend);
+    return next;
+  };
+
   while (pending.length > 0) {
     const entry = pending.shift();
     if (!entry) break;
@@ -70,9 +86,9 @@ export async function flushOutbox(
         attempts: entry.attempts + 1,
         lastError: result.error ?? "Onbekende synchronisatiefout",
       };
-      // gefaalde entry → terug aan de kop van de wachtrij, rest blijft erna
-      const nextQueue = [...done, failed, ...pending];
-      saveQueue(userId, nextQueue, backend);
+      // Gefaalde entry blijft op zijn plek (de kop van wat nog moet); de rest
+      // erna, en het verstuurde gaat eruit.
+      const nextQueue = settle(failed);
       saveSyncMeta(
         userId,
         {
@@ -98,8 +114,16 @@ export async function flushOutbox(
     { lastSyncedAt: new Date().toISOString(), lastError: null },
     backend,
   );
-  saveQueue(userId, [], backend);
-  return { ok: true, error: null, syncedCount, queuedCount: 0, queue: [] };
+  // Meestal leeg; niet leeg als er tijdens het versturen iets is gewijzigd —
+  // dat gaat dan met de volgende run mee.
+  const rest = settle(null);
+  return {
+    ok: true,
+    error: null,
+    syncedCount,
+    queuedCount: rest.length,
+    queue: rest,
+  };
 }
 
 /** Maximale wachttijd per server-actie voordat we de verbinding opgeven. */
