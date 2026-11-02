@@ -4,7 +4,7 @@
 
 ## 1. Doel & werkwijze
 
-- Lees altijd eerst `tasks.md` en het actieve planbestand (`tasks_03.md`) voordat je begint met implementeren.
+- Lees altijd eerst `docs/tasks.md` en het actieve planbestand (`docs/tasks_03.md`) voordat je begint met implementeren.
 - Werk **web-first**: bouw en test eerst in de browser (`npm run dev`). De Android-export gebeurt **alleen** nadat de gebruiker expliciet heeft aangegeven dat de webversie goed is.
 - Houd veranderingen klein en testbaar. Eén taak per keer, en zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond en getest.
 - Nieuwe of gewijzigde **logica hoort getest te worden met vitest** (`npm run test`), naast handmatig testen in de browser.
@@ -41,7 +41,7 @@
 | `npm run format`        | Voert Prettier uit over de codebase (of alleen gewijzigde bestanden).                                                                                          |
 | `npm run format:check`  | Controleert of alles al geformat is (zonder te schrijken).                                                                                                     |
 
-> **Let op:** `npm run test` en `npm run test:watch` bestaan sinds fase G (vitest + `@vue/test-utils` + `jsdom`, zie `task_02.md`). Spec-bestanden (`*.spec.ts`) staan naast de code en worden door `vue-tsc -b` strikt meegetypecheckt. Zie ook §5: `onMounted` hoort in de component, zodat composables testbaar blijven.
+> **Let op:** `npm run test` en `npm run test:watch` bestaan sinds fase G (vitest + `@vue/test-utils` + `jsdom`, zie `docs/task_02.md`). Spec-bestanden (`*.spec.ts`) staan naast de code en worden door `vue-tsc -b` strikt meegetypecheckt. Zie ook §5: `onMounted` hoort in de component, zodat composables testbaar blijven.
 
 > **Let op bij Android-APK's:** er is geen `npm run android:debug`. Voor een **debug**-APK (snel testen/sideload, ondertekend met het systeem debug keystore) gebruik je `./gradlew assembleDebug` vanuit `android/`, of `npx cap run android` voor directe installatie op een device. `npm run android:build` bouwt een _release_-APK; die is ondertekend zolang `android/keystore.properties` bestaat (anders ongetekend en niet installeerbaar). Zie §10.2.
 
@@ -56,9 +56,10 @@ Lijsten/
 ├── .gitignore
 ├── .prettierrc.json
 ├── AGENTS.md               # Deze file
-├── tasks.md                # Voortgang per fase (verwijst naar het actieve plan)
-├── task_02.md              # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
-├── tasks_03.md             # Actief plan: open registratie + e-mailverificatie
+├── docs/
+│   ├── tasks.md            # Voortgang per fase (verwijst naar het actieve plan)
+│   ├── task_02.md          # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
+│   └── tasks_03.md         # Actief plan: open registratie + e-mailverificatie
 ├── index.html              # Vite entry (fonts + PWA-/iOS-meta)
 ├── package.json
 ├── capacitor.config.json   # webDir: dist
@@ -233,7 +234,7 @@ Bij klikken op "verwijder lijst" (per kaart) opent een **bevestigingsmodal/dialo
 ### 8.4 Taken: `[ ]` / `[x]` prefix
 
 - Taken krijgen `[ ]` voor de titel om ze tijdens het project af te kunnen kruisen `[x]`.
-- Dit geldt **uitsluitend** voor `tasks.md` en de planbestanden. Het is **geen** app-feature: de prefix wordt **niet** in de database of item-tekst opgeslagen.
+- Dit geldt **uitsluitend** voor `docs/tasks.md` en de planbestanden. Het is **geen** app-feature: de prefix wordt **niet** in de database of item-tekst opgeslagen.
 - Een taak wordt **pas** op `[x]` gezet **ná succesvolle voltooiing** (aantoonbaar getest, build/typecheck ok, en functionaliteit werkt). Niet eerder.
 
 ### 8.5 Item afvinken
@@ -447,7 +448,7 @@ Een taak is pas afgerond als:
 - [ ] Cross-user isolatie getest (inloggen als user A, uitloggen, inloggen als user B → geen data van A zichtbaar)
 - [ ] Sync-behavior correct (outbox FIFO, retry/backoff, indicator toont juiste status)
 - [ ] Bij auth-/registratiewijzigingen: negatieve test gedaan (onbevestigd e-mailadres kan niet inloggen; resend met cooldown)
-- [ ] Taakregel in `tasks.md` of het planbestand is **[x]** gezet (na succesvolle afronding)
+- [ ] Taakregel in `docs/tasks.md` of het planbestand is **[x]** gezet (na succesvolle afronding)
 - [ ] Code consistent met bestaande stijl en architectuur
 
 ## 13. Regels "Niet doen"
