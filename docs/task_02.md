@@ -181,7 +181,7 @@ meer gekozen te worden; alleen de koppeling naar Android ontbreekt nog.
 is ongeldig of verlopen.` en een knop `Terug naar inloggen`. Dat volgt de
       view-tabel van A4.2 (`!user && inviteToken` → `RegisterView`) plus A3.5 en is
       bruikbaarder: de gebruiker ziet waarom de link niet werkt.
-- [ ] **A0.7** Testen op het apparaat (of de emulator), want dit werkt alleen op Android:
+- [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ **A0.7** Testen op het apparaat (of de emulator), want dit werkt alleen op Android:
       `adb shell am start -a android.intent.action.VIEW -d "com.lijstjes.app://invite?token=test"`.
       In de browser werkt het niet; daar geldt de `?invite=`-variant.
       **Let op:** de deep link kan een ambiguïteitsdialoog geven als een andere app het
@@ -215,7 +215,7 @@ alleen wat de app-code ervan gebruikt.
 | `public.claim_invite(token)`                    | RPC die de pagina aanroept: `valid` + `email` terug, en schrijft de claim.                                                             |
 | `public.enforce_invite_on_signup()` + trigger   | `before insert on auth.users`: geen account zonder geldige claim + uitnodiging voor dít e-mailadres; verbruikt de uitnodiging atomair. |
 
-- [ ] **A1.2** **Uitvoeren in de SQL Editor van het Supabase-project** (kan niet vanuit de
+- [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ **A1.2** **Uitvoeren in de SQL Editor van het Supabase-project** (kan niet vanuit de
       repo): het hele `supabase-invites.sql`-script plakken en Run. Daarna blok 6
       ("UITNODIGING MAKEN") per gebruiker uitvoeren; de query geeft de registratielink terug
       in de vorm `com.lijstjes.app://invite?token=…`.
@@ -230,14 +230,14 @@ ongeldig of verlopen.` — de app doet het juiste, maar registratie is onmogelij
 
   **Bevestigd door de gebruiker: "a1.3 is succesvol".**
 
-- [ ] **A1.4** Negatieve test (belangrijkste security-test, doe dit zelf of laat het uitvoeren):
+- [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ **A1.4** Negatieve test (belangrijkste security-test, doe dit zelf of laat het uitvoeren):
       roep `supabase.auth.signUp` rechtstreeks aan met de **anon key** en een e-mailadres
       dat wél een uitnodiging heeft maar **zonder** token → moet geweigerd worden met
       `no_active_invite`, en er ontstaat géén account.
 
   **Overgeslagen op verzoek van de gebruiker.**
 
-- [ ] **A1.5** Positieve test: `claim_invite('<geldig token>')` gevolgd door de registratiepagina
+- [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ **A1.5** Positieve test: `claim_invite('<geldig token>')` gevolgd door de registratiepagina
       met dat token → account wordt aangemaakt, uitnodiging staat op `gebruikt`.
 
   **Overgeslagen op verzoek van de gebruiker.**
@@ -863,12 +863,12 @@ zoals `flushOutbox` dat doet), dan is dat een kleine losse wijziging buiten fase
 
 - [x] **H1** `npm run typecheck`, `npm run build`, `npm run test`, `npm run verify:data` allemaal groen.
 - [x] **H2** Handmatig testen in `npm run dev` (checklist):
-  - [ ] registratie via uitnodigingslink (geldig token) → account aangemaakt → overzicht;
+  - [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ registratie via uitnodigingslink (geldig token) → account aangemaakt → overzicht;
         in de browser via `?invite=<token>` (de deep link werkt alleen op het apparaat);
-  - [ ] registratie met verlopen/onecht/verkeerd token → NL-melding, geen account;
-  - [ ] **zonder token** een account proberen aan te maken → geweigerd;
-  - [ ] signup met de anon key op een uitgenodigd e-mailadres zonder token → geweigerd (A1.4);
-  - [ ] tweede registratie met hetzelfde token → geweigerd, uitnodiging staat op 'gebruikt';
+  - [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ registratie met verlopen/onecht/verkeerd token → NL-melding, geen account;
+  - [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ **zonder token** een account proberen aan te maken → geweigerd;
+  - [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ signup met de anon key op een uitgenodigd e-mailadres zonder token → geweigerd (A1.4);
+  - [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ tweede registratie met hetzelfde token → geweigerd, uitnodiging staat op 'gebruikt';
   - [x] **cross-user isolatie**: user A uitloggen → user B inloggen → geen data van A;
   - [x] item verwijderen via dubbele klik (na 5 s hersteld); idem 'Verwijder afgevinkt';
   - [x] slechts één knop armed tegelijk (ander item armen herstelt het eerste);
@@ -882,8 +882,8 @@ zoals `flushOutbox` dat doet), dan is dat een kleine losse wijziging buiten fase
       representatief). Daarom blijven de vijf registratie-bullets hierboven open tot H3a.
 - [ ] **H3a** Device-test van het deep link (kan niet in de browser) — **uit te voeren met de
       gebouwde debug-APK van fase H**:
-  - [ ] `com.lijstjes.app://invite?token=<echt token>` opent de app op het `RegisterView`;
-  - [ ] een link zonder of met een ongeldig token opent de inlogpagina met NL-melding;
+  - [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ `com.lijstjes.app://invite?token=<echt token>` opent de app op het `RegisterView`;
+  - [x] _Vervallen — uitnodigingssysteem verwijderd in fase 6 (`claim_invite` bestaat niet meer, gecontroleerd 2026-11-02):_ een link zonder of met een ongeldig token opent de inlogpagina met NL-melding;
   - [ ] de app cold starten via de link (`getLaunchUrl`) én al draaiend (`appUrlOpen`) werken allebei;
   - [ ] `Wachtwoord vergeten?` → herstelmail aanvragen → link opent `ResetPasswordView`;
   - [ ] nieuw wachtwoord instellen werkt en logt daarna in op het overzicht.
@@ -918,23 +918,23 @@ zoals `flushOutbox` dat doet), dan is dat een kleine losse wijziging buiten fase
 
 ## Definition of Done (voor elke taak hierboven)
 
-- [ ] Implementatie voldoet aan de bovenstaande acceptatiecriteria.
-- [ ] `npm run typecheck` schoon (geen typefouten).
-- [ ] `npm run test` groen (vitest) voor gewijde/nieuwe logica.
-- [ ] `npm run build` slaagt.
-- [ ] `npm run format` toegepast op gewijzigde bestanden; `npm run format:check` schoon.
-- [ ] Geen `console.log` in productiecode (dev-only `console.warn` achter `import.meta.env.DEV`
+- [x] Implementatie voldoet aan de bovenstaande acceptatiecriteria.
+- [x] `npm run typecheck` schoon (geen typefouten).
+- [x] `npm run test` groen (vitest) voor gewijde/nieuwe logica.
+- [x] `npm run build` slaagt.
+- [x] `npm run format` toegepast op gewijzigde bestanden; `npm run format:check` schoon.
+- [x] Geen `console.log` in productiecode (dev-only `console.warn` achter `import.meta.env.DEV`
       is toegestaan en wordt becommentarieerd).
-- [ ] Toegankelijkheid: focus, `aria-*`, ESC, `focus-visible` — waar relevant gecontroleerd.
-- [ ] Cross-user isolatie niet gebroken (geen data van vorige gebruiker).
-- [ ] Sync-gedrag onveranderd correct: outbox FIFO, retry/backoff, indicatorstatus.
-- [ ] Handmatig getest in de browser (`npm run dev`).
+- [x] Toegankelijkheid: focus, `aria-*`, ESC, `focus-visible` — waar relevant gecontroleerd.
+- [x] Cross-user isolatie niet gebroken (geen data van vorige gebruiker).
+- [x] Sync-gedrag onveranderd correct: outbox FIFO, retry/backoff, indicatorstatus.
+- [x] Handmatig getest in de browser (`npm run dev`).
 - [ ] Deep link en herstelflow getest **op het Android-apparaat** (A0.7 / A6.7). Deze
       werken niet in een gewone browser en horen daarom bij het apparaat, niet bij `npm run dev`.
-- [ ] `dist/`, `www/` en `android/app/src/main/assets/public/` niet handmatig bewerkt.
-- [ ] `android/app/src/main/AndroidManifest.xml` alleen aangeraakt voor de intent-filter
+- [x] `dist/`, `www/` en `android/app/src/main/assets/public/` niet handmatig bewerkt.
+- [x] `android/app/src/main/AndroidManifest.xml` alleen aangeraakt voor de intent-filter
       uit A0.3, niets anders gewijzigd.
-- [ ] Taakregel in `tasks.md`/`task_02.md` pas op `[x]` **na** succesvolle afronding.
+- [x] Taakregel in `tasks.md`/`task_02.md` pas op `[x]` **na** succesvolle afronding.
 
 ## Besluiten (antwoorden op de openstaande punten)
 

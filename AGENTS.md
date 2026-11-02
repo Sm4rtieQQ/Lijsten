@@ -4,7 +4,7 @@
 
 ## 1. Doel & werkwijze
 
-- Lees altijd eerst `docs/tasks.md` en het actieve planbestand (`docs/tasks_03.md`) voordat je begint met implementeren.
+- Lees altijd eerst `docs/tasks.md` en het actieve planbestand (`docs/tasks_05.md`) voordat je begint met implementeren.
 - Werk **web-first**: bouw en test eerst in de browser (`npm run dev`). De Android-export gebeurt **alleen** nadat de gebruiker expliciet heeft aangegeven dat de webversie goed is.
 - Houd veranderingen klein en testbaar. Eén taak per keer, en zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond en getest.
 - Nieuwe of gewijzigde **logica hoort getest te worden met vitest** (`npm run test`), naast handmatig testen in de browser.
@@ -59,8 +59,9 @@ Lijsten/
 ├── docs/
 │   ├── tasks.md            # Voortgang per fase (verwijst naar het actieve plan)
 │   ├── task_02.md          # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
-│   ├── tasks_03.md         # Actief plan: open registratie + e-mailverificatie
-│   └── tasks_04.md         # Refactor (gedrag ongewijzigd)
+│   ├── tasks_03.md         # Plan fase 6: open registratie + e-mailverificatie
+│   ├── tasks_04.md         # Refactor (gedrag ongewijzigd)
+│   └── tasks_05.md         # Actief plan: navigatie, synchroniseren en slepen
 ├── .gitattributes          # eol=lf, zodat Prettier ook op Windows schoon is
 ├── index.html              # Vite entry (fonts + PWA-/iOS-meta)
 ├── package.json

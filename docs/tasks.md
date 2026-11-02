@@ -26,8 +26,8 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 - [x] Destructieve bulk-sync (`DELETE` alles + her-insert) verwijderen en vervangen door **outbox met per-entiteit operaties**
 - [x] Uitloggen-wachtrij: failed operaties met `error` + `attempts` bijhouden, retry met backoff onderbouwen
 - [x] `npm run verify:data` (`scripts/verify-data-layer.ts`): geautomatiseerde checks voor per-user isolatie, geen bulk-wipe, FIFO outbox, retry/backoff, reorder-operaties en titelvalidatie (52 checks groen)
-- [ ] Supabase RLS-beleid in `supabase-schema.sql` verifiëren/aanvullen — **schema is bijgewerkt** (gesplitste policies per operatie, `position`-kolom op `lists`, indexen); **nog uitvoeren in de SQL Editor van het Supabase-project**
-- [ ] Handleiding testen: inloggen als user A → data aanmaken → uitloggen → inloggen als user B → **geen** data van A zichtbaar; ook bij netwerkfout mag geen data van A getoond worden (vereist browser + 2 accounts; logica al gedekt door `verify:data`)
+- [x] Supabase RLS-beleid in `supabase-schema.sql` verifiëren/aanvullen — **schema is bijgewerkt** (gesplitste policies per operatie, `position`-kolom op `lists`, indexen); **nog uitvoeren in de SQL Editor van het Supabase-project** — **Uitgevoerd** (gecontroleerd 2026-11-02: kolom `lists.position` en `is_email_confirmed()` bestaan in de database).
+- [x] Handleiding testen: inloggen als user A → data aanmaken → uitloggen → inloggen als user B → **geen** data van A zichtbaar; ook bij netwerkfout mag geen data van A getoond worden (vereist browser + 2 accounts; logica al gedekt door `verify:data`) — **Getest** samen met de handmatige test van fase 3 (akkoord gebruiker) en opnieuw in poort H2 (`task_02.md`).
 
 ## Fase 3 — Features (web-only)
 
@@ -67,7 +67,7 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 - [x] APK verifiëren met `apksigner verify --print-certs` — `CN=Android Debug` (debug-certificaat)
 - [x] `.apk` lokaal bewaren volgens instructie gebruiker (groot bestand, niet in repo): `android/app/build/outputs/apk/debug/app-debug.apk`; bestaande `Lijstjes.apk` in root verwijderd
 - [x] Legacy opschonen: `www/`, `legacy/`, `app.js`, `supabase.config.js` en oude `Lijstjes.apk` verwijderd (na succesvolle build); `src/` verwees nergens meer naar deze bestanden
-- [ ] `git init` + eerste commit — **gebruiker regelt dit zelf** (geen identiteit ingesteld; op verzoek overgeslagen)
+- [x] `git init` + eerste commit — **gebruiker regelt dit zelf** (geen identiteit ingesteld; op verzoek overgeslagen) — **Gedaan** door de gebruiker (repo met historie sinds `994c896 initial commit`).
 - [x] Prettier config toevoegen/verifiëren en codebase formatteren (`npm run format:check` — alle bestanden al geformat)
 
 ## Fase 5 — Uitnodigingsregistratie, dubbele bevestiging, laadscherm, UI-fixes en vitest
@@ -76,7 +76,7 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 
 - [x] `AGENTS.md` opschonen: verouderde verwijzingen (`android:debug`, `legacy/`, `www/`, `app.js`, `supabase.config.js`, `Lijstjes.apk`) eruit; `supabase-invites.sql` in de projectstructuur; §11 herschreven als lessons learned; `npm run test` als harde eis in §12; alle paden/commando's geverifieerd tegen de repo
 - [x] `AGENTS.md` aanvullen met de nieuwe regels: §7.5 foutmeldingen, §7.6 registratie op uitnodiging, §8.6 dubbele bevestiging, §8.7 laadscherm, §8.8 accountmenu, §8.9 inlogpagina, §8.10 titelmarge, §13 "Niet doen"
-- [ ] **Fase A — Registratie op uitnodiging** (deel 1 af, zie `task_02.md`):
+- [x] _Vervallen — vervangen door fase 6 (open registratie):_ **Fase A — Registratie op uitnodiging** (deel 1 af, zie `task_02.md`):
   - [x] **A0** Deep link: `@capacitor/app` geïnstalleerd, `cap sync android`, tweede `VIEW`/`BROWSABLE` `<intent-filter>` zonder `autoVerify`, `useDeepLink.ts` + `lib/inviteToken.ts` (deep link, `?invite=`, `#invite=`, recovery-link)
   - [x] **A1** types in `database.types.ts` (`invites`, `invite_claims`, `claim_invite`)
   - [x] **A2** `useAuth`: open `signUp` vervangen door `acceptInvite` (claim → email-check → signup), `init()` geëxporteerd, `updatePassword`, `recovery`-ref, `lib/errorMessages.ts` met NL-teksten
@@ -85,7 +85,7 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
   - [x] **A5** `LoginView.vue` zonder registratieknop en zonder uitnodigingstekst
   - [x] **A6** `ResetPasswordView.vue` + `redirectTo: "com.lijstjes.app://"` (zonder SMTP, dus met expliciete aandacht voor de beperkte aflevering)
   - [x] **A1.3** zelf-test `claim_invite('bestaat-niet')` → `valid = false` (bevestigd)
-  - [ ] Overgeslagen op verzoek: A1.2 (SQL uitvoeren), A1.4/A1.5 (negatieve/positieve test), A0.7 (deep link op apparaat), A6.7 (herstel-link op apparaat) — blijven open tot fase H
+  - [x] _Vervallen (uitnodiging verwijderd); de device-test van herstel staat nog open in `task_02.md` A6.7:_ Overgeslagen op verzoek: A1.2 (SQL uitvoeren), A1.4/A1.5 (negatieve/positieve test), A0.7 (deep link op apparaat), A6.7 (herstel-link op apparaat) — blijven open tot fase H
 - [x] **Fase B — Dubbele bevestiging bij verwijderen:** `useArmedConfirm.ts` (5s timeout, één knop armed tegelijk), item-verwijderknop en 'Verwijder afgevinkt' in `ListDetailView.vue`; armed-stijl zichtbaar zonder hover; `aria-pressed` + aangepast `aria-label` — **door gebruiker getest en goedgekeurd**
 - [x] **Fase C — Laadscherm:** `SplashView.vue` met titel + oranje streep + spinner rechtsonder, `role="status"`/`aria-busy`, niet scrollbaar; `App.vue` toont het bij opstarten en tijdens de eerste `hydrate()` (max. 3s) — afgerond en door gebruiker goedgekeurd (streep links uitgelijnd met de titel)
 - [x] **Fase D — Foutmelding synchronisatie:** D1–D5 af: oorzaak gereproduceerd (postgrest-js gooit `TypeError: Failed to fetch` bij netwerkuitval, niets ving het af → `flushing`/`syncing` bleef hangen); `flushOutbox` reject nooit meer, `applyEntry` in `try/catch` + NL-mapper; `runFlush` in `try/catch/finally` met retry/backoff; `errorMessages.ts` (`toUserFacingError` + fallback `Synchronisatie mislukt. Probeer het opnieuw.`); label `Fout bij synchroniseren`; inklappen (1,5s) geldt ook voor `error`; **geen tekst onder de pill** (foutregels verwijderd, op verzoek van de gebruiker). Extra fixes n.a.v. D6-test: hangende requests (Firefox-offline) kunnen de spinner niet meer blokkeren — 10s timeout per server-actie in `applyEntry` en `pullListsFromServer`; en een `navigator.onLine`-fast-path in `useSync.ts` (offline → pill **meteen** rood, `online`-event flusht automatisch opnieuw). **D6 afgerond na hertest gebruiker ("Ja, werkt nu goed")**
@@ -98,3 +98,4 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 - [ ] Fase 6 — Open registratie + e-mailverificatie: zie [tasks_03.md](tasks_03.md).
 
 - [ ] Fase 7 — Refactor (gedrag ongewijzigd): zie [tasks_04.md](tasks_04.md).
+- [ ] Fase 8 — Navigatie, synchroniseren en slepen: zie [tasks_05.md](tasks_05.md).

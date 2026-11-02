@@ -76,6 +76,10 @@
       Email). Gevolg: `signUp` geeft geen sessie terug tot de gebruiker klikt; inloggen zonder
       bevestiging wordt server-side geweigerd. `Allow new users to sign up` blijft AAN.
 
+  **Gecontroleerd 2026-11-02** (`GET /auth/v1/settings`): "Confirm email" staat AAN
+  (`mailer_autoconfirm: false`), maar **"Allow new users to sign up" staat UIT**
+  (`disable_signup: true`). Daardoor werkt open registratie niet. Open tot dit weer AAN staat.
+
 - [ ] **1.4** URL-configuratie: Site URL en Redirect URLs blijven `com.lijstjes.app://`.
       Voor webtesten (`npm run dev`) ook `http://localhost:5173` aan de Redirect URLs toevoegen.
 
@@ -86,6 +90,10 @@
 - [ ] **1.6** Verifiëren dat het SQL-script is uitgevoerd: een testgebruiker aanmaken op een
       eigen adres moet lukken (geen `no_active_invite` meer), en `select * from public.invites`
       bestaat niet meer.
+
+  **Gecontroleerd 2026-11-02:** het script is uitgevoerd — `rpc/is_email_confirmed` bestaat
+  (geeft `false` zonder sessie) en `rpc/claim_invite` geeft 404. Een testgebruiker aanmaken
+  kan pas als signup weer AAN staat (zie 1.3).
 
 ---
 
