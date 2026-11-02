@@ -58,23 +58,17 @@ describe("useLists — mutaties via cache + outbox (AGENTS.md §7)", () => {
     expect(opTypes()).toEqual(["list.create", "list.update"]);
   });
 
-  it("addItem: nieuwste bovenaan, posities doorlopend, create + reorder", () => {
+  it("addItem: nieuwste bovenaan, één lager dan de bovenste; geen herschikking (§7.3)", () => {
     const id = L.createNewList("Boodschappen");
     L.addItem(id, "melk");
     L.addItem(id, " brood ");
     L.addItem(id, "   ");
     const items = L.lists.value[0]?.items ?? [];
     expect(items.map((i) => [i.text, i.position])).toEqual([
-      ["brood", 0],
-      ["melk", 1],
+      ["brood", -1],
+      ["melk", 0],
     ]);
-    expect(opTypes()).toEqual([
-      "list.create",
-      "item.create",
-      "item.reorder",
-      "item.create",
-      "item.reorder",
-    ]);
+    expect(opTypes()).toEqual(["list.create", "item.create", "item.create"]);
   });
 
   it("toggleItem / renameItem: item.update met de nieuwe staat", () => {
@@ -119,7 +113,6 @@ describe("useLists — mutaties via cache + outbox (AGENTS.md §7)", () => {
     expect(queue.map((e) => e.type)).toEqual([
       "list.create",
       "item.create",
-      "item.reorder",
       "list.delete",
     ]);
     expect(JSON.stringify(queue.slice(0, -1))).not.toContain(gone);
@@ -144,8 +137,6 @@ describe("useLists — mutaties via cache + outbox (AGENTS.md §7)", () => {
     ]);
     expect(opTypes().filter((t) => t.endsWith("reorder"))).toEqual([
       "list.reorder",
-      "item.reorder",
-      "item.reorder",
       "item.reorder",
     ]);
   });

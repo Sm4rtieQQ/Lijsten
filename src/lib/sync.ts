@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { toUserFacingError } from "./errorMessages";
-import { compactOutbox } from "./outbox";
+import { compactOutbox, nextBatch } from "./outbox";
 import type { OutboxEntry } from "../types/sync";
 import type { List } from "../types/app";
 import type { Database } from "./database.types";
@@ -66,47 +66,51 @@ export async function flushOutbox(
    * blijft zo staan. Verstuurde operaties komen nooit terug in de wachtrij,
    * anders worden ze bij de retry dubbel verstuurd.
    */
-  const settle = (failed: OutboxEntry | null): OutboxEntry[] => {
+  const settle = (failed: readonly OutboxEntry[]): OutboxEntry[] => {
     const doneIds = new Set(done.map((entry) => entry.opId));
+    const failedById = new Map(failed.map((entry) => [entry.opId, entry]));
     const next = loadQueue(userId, backend)
       .filter((entry) => !doneIds.has(entry.opId))
-      .map((entry) => (failed && entry.opId === failed.opId ? failed : entry));
+      .map((entry) => failedById.get(entry.opId) ?? entry);
     saveQueue(userId, next, backend);
     return next;
   };
 
   while (pending.length > 0) {
-    const entry = pending.shift();
-    if (!entry) break;
+    // Opeenvolgende creates/deletes gaan samen in één request (§7.3).
+    const batch = nextBatch(pending);
+    if (batch.length === 0) break;
+    pending.splice(0, batch.length);
 
-    const result = await applyEntry(entry, userId, client);
+    const result = await applyBatch(batch, userId, client);
     if (!result.ok) {
-      const failed: OutboxEntry = {
+      const lastError = result.error ?? "Onbekende synchronisatiefout";
+      // Een mislukte bundel markeert al zijn operaties; ze blijven op hun plek
+      // (de kop van wat nog moet), het verstuurde gaat eruit.
+      const failed = batch.map((entry) => ({
         ...entry,
         attempts: entry.attempts + 1,
-        lastError: result.error ?? "Onbekende synchronisatiefout",
-      };
-      // Gefaalde entry blijft op zijn plek (de kop van wat nog moet); de rest
-      // erna, en het verstuurde gaat eruit.
+        lastError,
+      }));
       const nextQueue = settle(failed);
       saveSyncMeta(
         userId,
         {
           lastSyncedAt: loadSyncMeta(userId, backend).lastSyncedAt,
-          lastError: failed.lastError,
+          lastError,
         },
         backend,
       );
       return {
         ok: false,
-        error: failed.lastError,
+        error: lastError,
         syncedCount,
         queuedCount: nextQueue.length,
         queue: nextQueue,
       };
     }
-    done.push(entry);
-    syncedCount += 1;
+    done.push(...batch);
+    syncedCount += batch.length;
   }
 
   saveSyncMeta(
@@ -116,7 +120,7 @@ export async function flushOutbox(
   );
   // Meestal leeg; niet leeg als er tijdens het versturen iets is gewijzigd —
   // dat gaat dan met de volgende run mee.
-  const rest = settle(null);
+  const rest = settle([]);
   return {
     ok: true,
     error: null,
@@ -157,14 +161,73 @@ async function applyEntry(
   userId: string,
   client: SupabaseClient<Database>,
 ): Promise<{ ok: boolean; error: string | null }> {
+  return guarded(() => applyToClient(entry, userId, client));
+}
+
+/**
+ * Past een groep operaties toe (zie `nextBatch`): één operatie zoals altijd,
+ * meerdere `item.create` als één insert, meerdere `item.delete` van één lijst
+ * als één delete. Reject nooit.
+ */
+async function applyBatch(
+  batch: readonly OutboxEntry[],
+  userId: string,
+  client: SupabaseClient<Database>,
+): Promise<{ ok: boolean; error: string | null }> {
+  const [first] = batch;
+  if (!first) return { ok: true, error: null };
+  if (batch.length === 1) return applyEntry(first, userId, client);
+
+  return guarded(async () => {
+    if (first.type === "item.create") {
+      const rows = batch.flatMap((entry) =>
+        entry.type === "item.create"
+          ? [
+              {
+                id: entry.item.id,
+                list_id: entry.item.listId,
+                text: entry.item.text,
+                done: entry.item.done,
+                position: entry.item.position,
+              },
+            ]
+          : [],
+      );
+      return (await client.from("list_items").insert(rows)).error;
+    }
+    if (first.type === "item.delete") {
+      const ids = batch.flatMap((entry) =>
+        entry.type === "item.delete" ? [entry.itemId] : [],
+      );
+      // Altijd met id-filter (geen bulk-wipe) én op de lijst (defense in depth).
+      const res = await client
+        .from("list_items")
+        .delete()
+        .in("id", ids)
+        .eq("list_id", first.listId);
+      return res.error;
+    }
+    // `nextBatch` bundelt niets anders; voor de zekerheid één voor één.
+    for (const entry of batch) {
+      const error = await applyToClient(entry, userId, client);
+      if (error) return error;
+    }
+    return null;
+  });
+}
+
+/**
+ * Voert een server-actie uit met timeout en leesbare NL-fout; reject nooit
+ * (AGENTS.md §7.5/D2).
+ */
+async function guarded(
+  run: () => PromiseLike<{ message: string } | null>,
+): Promise<{ ok: boolean; error: string | null }> {
   try {
     // D2-fix (fase D): een hangende network-request mag de flush nooit kunnen
     // blokkeren (anders blijft `runFlush` op "syncing" hangen). Na de timeout
     // wordt de entry als mislukt gemarkeerd en gaat de backoff-cyclus verder.
-    const error = await withTimeout(
-      applyToClient(entry, userId, client),
-      REQUEST_TIMEOUT_MS,
-    );
+    const error = await withTimeout(run(), REQUEST_TIMEOUT_MS);
     return error
       ? { ok: false, error: toUserFacingError(error) }
       : { ok: true, error: null };

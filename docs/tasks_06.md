@@ -76,20 +76,21 @@
 
 ## V3 — Minder requests per keer versturen
 
-- [ ] **V3.1** Opeenvolgende `item.create` → één insert met alle rijen.
-- [ ] **V3.2** Opeenvolgende `item.delete` (ook `Verwijder afgevinkt`) → één
+- [x] **V3.1** Opeenvolgende `item.create` → één insert met alle rijen.
+- [x] **V3.2** Opeenvolgende `item.delete` (ook `Verwijder afgevinkt`) → één
       `delete().in("id", ids)`, nog steeds gefilterd op de lijst.
-- [ ] **V3.3** Item toevoegen herschikt de lijst niet meer: het nieuwe item
+- [x] **V3.3** Item toevoegen herschikt de lijst niet meer: het nieuwe item
       krijgt positie `kleinste positie − 1`, dus geen `item.reorder` meer bij
       `addItem`. Slepen nummert nog wel door. Server en pull sorteren al op
       `position`; negatieve posities zijn geldig (`integer`).
-- [ ] **V3.4** Mislukt een gebundeld request, dan worden alle operaties erin
+- [x] **V3.4** Mislukt een gebundeld request, dan worden alle operaties erin
       gemarkeerd (`attempts+1`, `lastError`) en opnieuw geprobeerd met backoff;
       `flushOutbox` rejecteert nog steeds nooit (§7.5).
-- [ ] **V3.5** Tests + `verify:data`: bundels, foutpad, FIFO, posities na
+      _Uitvoering: alleen een operatie die de server weigerde gaat voortaan alleen; na een netwerkfout of timeout mag hij weer mee in een bundel (anders ging na een offline periode alles los). Ook de deletes zijn per lijst gebundeld (`.in("id")` + `.eq("list_id")`)._
+- [x] **V3.5** Tests + `verify:data`: bundels, foutpad, FIFO, posities na
       toevoegen. Doel uit het voorbeeld: 10 items aan een lijst van 50 →
       **1 request** (was ≈ 565).
-- [ ] Commit + AGENTS.md §7.3.
+- [x] Commit + AGENTS.md §7.3.
 
 ## V4 — Volgorde opslaan in één request (databasefunctie)
 

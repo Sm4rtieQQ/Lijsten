@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  CONNECTION_DROPPED,
+  DUPLICATE_ERROR,
+  NETWORK_ERROR,
+} from "./errorMessages";
 import { createListItem } from "../types/app";
 import type { OutboxEntry, OutboxOpPayload } from "../types/sync";
 import {
+  MAX_BATCH_SIZE,
   compactOutbox,
   createOutboxEntry,
+  nextBatch,
   nextRetryAttempt,
   pruneQueueForList,
 } from "./outbox";
@@ -174,5 +181,66 @@ describe("compactOutbox — wachtende operaties samenvoegen (AGENTS.md §7.3)", 
     ];
     const once = compactOutbox(queue);
     expect(compactOutbox(once)).toEqual(once);
+  });
+});
+
+describe("nextBatch — gebundelde requests (AGENTS.md §7.3)", () => {
+  const create = (text: string): OutboxEntry =>
+    entry({
+      type: "item.create",
+      item: createListItem({ listId: "L1", text }),
+    });
+  const del = (listId: string): OutboxEntry =>
+    entry({
+      type: "item.delete",
+      itemId: createListItem({ listId, text: "x" }).id,
+      listId,
+    });
+  const withError = (e: OutboxEntry, lastError: string): OutboxEntry => ({
+    ...e,
+    attempts: 1,
+    lastError,
+  });
+
+  it("opeenvolgende creates samen; stopt bij een ander type", () => {
+    const queue = [
+      create("a"),
+      create("b"),
+      create("c"),
+      del("L1"),
+      create("d"),
+    ];
+    expect(nextBatch(queue)).toHaveLength(3);
+  });
+
+  it("deletes alleen samen binnen dezelfde lijst", () => {
+    expect(nextBatch([del("L1"), del("L1"), del("L2")])).toHaveLength(2);
+  });
+
+  it("andere operaties gaan alleen", () => {
+    const update = entry({
+      type: "list.update",
+      listId: "L1",
+      title: "x",
+    });
+    expect(nextBatch([update, update])).toEqual([update]);
+    expect(nextBatch([])).toEqual([]);
+  });
+
+  it("door de server geweigerd → alleen; na een netwerkfout → weer bundelbaar", () => {
+    const rejected = withError(create("dubbel"), DUPLICATE_ERROR);
+    expect(nextBatch([rejected, create("b")])).toEqual([rejected]);
+    expect(nextBatch([create("a"), rejected])).toHaveLength(1);
+
+    const offline = withError(create("a"), NETWORK_ERROR);
+    const timedOut = withError(create("b"), CONNECTION_DROPPED);
+    expect(nextBatch([offline, timedOut, create("c")])).toHaveLength(3);
+  });
+
+  it(`hooguit ${MAX_BATCH_SIZE} per bundel`, () => {
+    const many = Array.from({ length: MAX_BATCH_SIZE + 5 }, (_, i) =>
+      create(String(i)),
+    );
+    expect(nextBatch(many)).toHaveLength(MAX_BATCH_SIZE);
   });
 });

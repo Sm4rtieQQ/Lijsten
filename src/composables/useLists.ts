@@ -174,18 +174,17 @@ function addItem(listId: string, text: string): void {
   const list = findList(listId);
   if (!boundUser || !clean || !list) return;
 
-  const item: ListItem = createListItem({ listId, text: clean });
-  // Nieuwste bovenaan (zoals de oude app); posities opnieuw laten
-  // doorlopen zodat array-volgorde == position-volgorde blijft kloppen.
-  const items = [item, ...list.items].map((it, index) => ({
-    ...it,
-    position: index,
-  }));
+  // Nieuwste bovenaan (zoals de oude app). De nieuwe positie is één lager dan
+  // de bovenste, zodat de rest niet hoeft te verschuiven: geen herschikking
+  // van de hele lijst bij elk nieuw item (§7.3). Negatief mag; de server en de
+  // pull sorteren op `position`.
+  const top = list.items[0]?.position;
+  const position = top === undefined ? 0 : top - 1;
+  const item: ListItem = createListItem({ listId, text: clean, position });
 
-  setItems(listId, items);
+  setItems(listId, [item, ...list.items]);
   persistLists();
-  enqueue({ type: "item.create", item: { ...item, position: 0 } });
-  enqueue({ type: "item.reorder", listId, itemIds: items.map((i) => i.id) });
+  enqueue({ type: "item.create", item });
 }
 
 function updateItem(

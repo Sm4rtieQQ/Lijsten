@@ -104,6 +104,7 @@ function makeFauxClient(options: FauxClientOptions = {}): {
       delete: () => typeof chain;
       select: (cols: unknown) => typeof chain;
       eq: (key: string, value: unknown) => typeof chain;
+      in: (key: string, values: unknown) => typeof chain;
       order: (column: string, opts?: { ascending?: boolean }) => typeof chain;
       then: (
         onFulfilled: (v: unknown) => unknown,
@@ -130,6 +131,10 @@ function makeFauxClient(options: FauxClientOptions = {}): {
       select: (cols: unknown) => {
         op = "select";
         row = cols;
+        return chain;
+      },
+      in: (key: string, values: unknown) => {
+        filters.push([`${key}:in`, values]);
         return chain;
       },
       eq: (key: string, value: unknown) => {
@@ -624,6 +629,77 @@ async function testFlushSettlesQueue(): Promise<void> {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Gebundelde requests (§7.3)
+// ---------------------------------------------------------------------------
+
+async function testBatchedRequests(): Promise<void> {
+  // 10 nieuwe items (zoals addItem ze maakt: steeds één lager) → 1 insert.
+  const mem = memoryStorage();
+  const faux = makeFauxClient();
+  const created = Array.from({ length: 10 }, (_, i) =>
+    entry({
+      type: "item.create",
+      item: { ...item(`N${i}`, "L1", `item ${i}`), position: -1 - i },
+    }),
+  );
+  saveQueue("userA", created, mem);
+  const result = await flushOutbox("userA", client(faux.backend), mem);
+  assert(result.ok && result.syncedCount === 10, "10 creates verwerkt");
+  assert(
+    faux.calls.length === 1,
+    `10 nieuwe items = 1 request (kreeg ${faux.calls.length})`,
+  );
+  const rows = faux.calls[0]?.row as Array<{ id: string; position: number }>;
+  assert(
+    Array.isArray(rows) && rows.length === 10 && rows[9]?.position === -10,
+    "de insert bevat alle 10 rijen met hun positie",
+  );
+
+  // "Verwijder afgevinkt": deletes van één lijst → 1 delete, met id- én lijstfilter.
+  const mem2 = memoryStorage();
+  const faux2 = makeFauxClient();
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "item.delete", itemId: "D1", listId: "L1" }),
+      entry({ type: "item.delete", itemId: "D2", listId: "L1" }),
+      entry({ type: "item.delete", itemId: "D3", listId: "L2" }),
+    ],
+    mem2,
+  );
+  await flushOutbox("userA", client(faux2.backend), mem2);
+  assert(faux2.calls.length === 2, "deletes per lijst gebundeld (2 requests)");
+  const bundled = faux2.calls[0];
+  assert(
+    !!bundled &&
+      bundled.filters.some(
+        ([key, value]) =>
+          key === "id:in" && JSON.stringify(value) === '["D1","D2"]',
+      ) &&
+      bundled.filters.some(
+        ([key, value]) => key === "list_id" && value === "L1",
+      ),
+    "gebundelde delete: id-filter (geen bulk-wipe) + lijstfilter",
+  );
+
+  // Mislukte bundel: alle operaties gemarkeerd, niets verstuurd uit de wachtrij.
+  const mem3 = memoryStorage();
+  saveQueue("userA", created.slice(0, 3), mem3);
+  const failing = makeFauxClient({ shouldFail: () => true });
+  const failed = await flushOutbox("userA", client(failing.backend), mem3);
+  const left = loadQueue("userA", mem3);
+  assert(
+    !failed.ok && failing.calls.length === 1,
+    "één mislukt gebundeld request",
+  );
+  assert(
+    left.length === 3 &&
+      left.every((e) => e.attempts === 1 && e.lastError !== null),
+    "alle 3 operaties uit de bundel staan gemarkeerd in de wachtrij",
+  );
+}
+
 async function testPullOrder(): Promise<void> {
   const faux = makeFauxClient({
     selectData: [
@@ -700,6 +776,7 @@ async function main(): Promise<void> {
   await testPullOrder();
   await testCompactionBeforeFlush();
   await testFlushSettlesQueue();
+  await testBatchedRequests();
   testExactTitleMatch();
 
   console.log(
