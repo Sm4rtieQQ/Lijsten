@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 
 import ListDetailView from "./ListDetailView.vue";
 import { useLists } from "../composables/useLists";
@@ -68,5 +68,22 @@ describe("ListDetailView (clear-knop, AGENTS.md §8.6)", () => {
     expect(clear.attributes("aria-label")).toBe(
       "Bevestigen: afgevinkte items verwijderen",
     );
+  });
+});
+
+describe("ListDetailView — item bewerken", () => {
+  let wrapper: VueWrapper | undefined;
+  afterEach(() => {
+    wrapper?.unmount();
+    lists.value = [];
+    setActiveList(null);
+  });
+
+  it("zet de focus in het invoerveld zodra je gaat bewerken", async () => {
+    seed([item("Melk", false)]);
+    wrapper = mount(ListDetailView, { attachTo: document.body });
+    await wrapper.get(".edit-button").trigger("click");
+    await flushPromises();
+    expect(document.activeElement).toBe(wrapper.get("input.item-text").element);
   });
 });

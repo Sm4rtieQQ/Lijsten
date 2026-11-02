@@ -26,7 +26,8 @@ const list = computed(() => currentList());
 const newItemText = ref("");
 const editingItemId = ref<string | null>(null);
 const editingText = ref("");
-const editInputEl = ref<HTMLInputElement | null>(null);
+// Een `ref` binnen `v-for` vult Vue als array; er is hooguit één invoerveld.
+const editInputEls = ref<HTMLInputElement[]>([]);
 const draggingItemId = ref<string | null>(null);
 const dragOverItemId = ref<string | null>(null);
 
@@ -92,8 +93,9 @@ watch(canClear, (value) => {
 watch(editingItemId, (id) => {
   if (!id) return;
   nextTick(() => {
-    editInputEl.value?.focus();
-    editInputEl.value?.select();
+    const input = editInputEls.value[0];
+    input?.focus();
+    input?.select();
   });
 });
 
@@ -299,7 +301,7 @@ function onItemDrop(targetId: string): void {
           </button>
           <input
             v-if="editingItemId === item.id"
-            ref="editInputEl"
+            ref="editInputEls"
             v-model="editingText"
             class="item-text"
             type="text"
