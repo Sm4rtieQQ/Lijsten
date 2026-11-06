@@ -121,6 +121,7 @@ Lijsten/
 │       ├── validation.ts       # Wachtwoord-/e-mailvalidatie (één bron)
 │       ├── outbox.ts           # Pure outbox-helpers (entry, prune, retry)
 │       ├── storage.ts          # Per-user storage + outbox
+│       ├── authLog.ts          # Ring buffer van auth-events (diagnose onverwacht uitloggen, §7.1)
 │       ├── sync.ts             # Offline-first sync logica
 │       ├── errorMessages.ts    # Fout -> leesbare NL-tekst (§7.5)
 │       └── utils.ts
@@ -163,12 +164,12 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 
 ### 7.1 Kernprincipes
 
-- **Per-user cache.** Elke `localStorage`-key is **per `userId`**: `lijstjes:data:<userId>`, `lijstjes:queue:<userId>`, `lijstjes:sync:<userId>` en `lijstjes:view:<userId>` (laatst bezochte pagina, §8.13). **Nooit** een globale key zonder userId. Bij uitloggen wordt alle state van die sessie geleegd.
+- **Per-user cache.** Elke `localStorage`-key is **per `userId`**: `lijstjes:data:<userId>`, `lijstjes:queue:<userId>`, `lijstjes:sync:<userId>` en `lijstjes:view:<userId>` (laatst bezochte pagina, §8.13). **Nooit** een globale key zonder userId (enige uitzondering: de auth-diagnoselog zonder persoonsgegevens, hieronder). Bij uitloggen door de gebruiker wordt alle state van die sessie geleegd; bij een onvrijwillig sessie-einde blijven cache en outbox bewust staan (hieronder).
 - **Server als gedeelde bron, client offline-first.** Wijzigingen gaan eerst naar de lokale cache + een operationele outbox (queue). Sync pusht de outbox naar Supabase in order.
 - **Nooit bulk-wipe naar server.** `syncToSupabase()` in de oude code deed `DELETE` van alle lijsten van de gebruiker en her-insertte alles — dat is de oorzaak van het cross-user datalek. **Deze destructieve bulk-sync wordt niet overgenomen.** Gebruik per-entiteit operaties (create/update/delete) vanuit de outbox.
 - **Defense in depth:** queries filteren **expliciet** op `owner_id = auth.uid()` waar mogelijk, en RLS blijft tweede beveiligingslaag (zoals in `supabase/schema.sql`).
 - **Cross-user isolatie:** bij wisselen van gebruiker wordt de cache van de vorige gebruiker nooit gelezen of gemengd. LocalStorage wordt per-user gescheiden.
-- **Leeg account na uitloggen:** `lists`, `activeListId`, outbox en alle per-user keys worden gewist bij `signOut()`. Geen voorbeelddata wordt automatisch geladen voor ingelogde gebruikers (zie sectie 8).
+- **Leeg account na uitloggen:** `lists`, `activeListId`, outbox en alle per-user keys worden gewist bij `signOut()` (uitloggen door de gebruiker; zie de uitzondering hieronder). Geen voorbeelddata wordt automatisch geladen voor ingelogde gebruikers (zie sectie 8).
 - **Alleen een uitlog-actie van de gebruiker wist de per-user keys.** Eindigt de sessie buiten hem om (`SIGNED_OUT` zonder `signOut()`: refresh-token geweigerd, sessielimiet, opslag gewist, uitgelogd in een ander tabblad), dan wist `App.vue` alleen de in-memory state (`reset({ keepStoredData: true })`); cache en outbox blijven per `userId` staan en worden bij de volgende login van dezelfde gebruiker gesynchroniseerd. Een andere gebruiker leest ze nooit (keys zijn per `userId`). Of het uitloggen van de gebruiker kwam, houdt `useAuth` bij (`wasLastSignOutUserInitiated()`); bij twijfel blijven de gegevens staan.
 - **Auth-diagnose:** `useAuth` logt elk `onAuthStateChange`-event (naam, tijdstip, `userInitiated`) in een ring buffer van de laatste 20 in `localStorage` (`lijstjes:authlog`, `lib/authLog.ts`; bewust de enige globale key: geen tokens, e-mail of id's). Uitlezen in de console: `lijstjesAuthLog()`. In dev komt een onvrijwillige `SIGNED_OUT` ook als `console.warn`.
 

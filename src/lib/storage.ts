@@ -7,8 +7,9 @@ import { isOutboxEntryArray, type OutboxEntry } from "../types/sync";
  *
  * De backend is injecteerbaar zodat de logica in Node/tests verifieerbaar is.
  * Keys zijn ALTIJD per `userId` gescopeed (`lijstjes:data:<userId>`, enz.) —
- * een globale key bestaat bewust niet (fix voor het cross-user datalek, zie
- * AGENTS.md §11).
+ * een globale key met gebruikersdata bestaat bewust niet (fix voor het cross-user datalek, zie
+ * AGENTS.md §11). Enige uitzondering buiten deze module: de auth-diagnoselog
+ * (`lib/authLog.ts`), die geen gebruikersgegevens bevat.
  */
 
 export interface StorageBackend {
