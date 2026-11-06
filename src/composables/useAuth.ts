@@ -1,6 +1,7 @@
 import { ref, type Ref } from "vue";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
+import { appendAuthLog, readAuthLog } from "../lib/authLog";
 import type { Database } from "../lib/database.types";
 import {
   EMAIL_NOT_CONFIRMED,
@@ -49,6 +50,24 @@ const NOT_CONFIGURED = "Supabase is nog niet geconfigureerd.";
  */
 const RESET_REQUESTED =
   "Als dit e-mailadres bekend is, ontvang je een herstelmail. Die kan door de afleverbeperking van Supabase uitblijven of in de spam belanden.";
+
+/**
+ * Of het uitloggen door de gebruiker zelf kwam (`signOut()` hieronder, na de
+ * flush-of-bevestig-stap in HomeView). Een sessie die op een andere manier
+ * eindigt (refresh-token geweigerd, sessielimiet, opslag gewist, uitgelogd in een
+ * ander tabblad) is onvrijwillig: dan mag App.vue de outbox niet wissen.
+ * `signOutRequested` staat alleen aan zolang `signOut()` loopt;
+ * `lastSignOutUserInitiated` onthoudt het oordeel over de laatst beëindigde
+ * sessie, zodat het ook klopt als de watcher in App.vue pas later draait.
+ * Standaard `false`: bij twijfel blijven de gegevens staan.
+ */
+let signOutRequested = false;
+let lastSignOutUserInitiated = false;
+
+/** `true` als de laatst beëindigde sessie door de gebruiker zelf is afgesloten. */
+export function wasLastSignOutUserInitiated(): boolean {
+  return lastSignOutUserInitiated;
+}
 
 /**
  * Zet de herstel-status. Exposed op module-niveau zodat `useDeepLink` de
@@ -111,6 +130,16 @@ async function runAuthAction(
   return true;
 }
 
+/**
+ * Debug-accessor: `lijstjesAuthLog()` in de browserconsole (of via remote
+ * debugging van de Android-WebView) geeft de laatste auth-events terug.
+ */
+function exposeAuthLog(): void {
+  if (typeof window === "undefined") return;
+  (window as unknown as { lijstjesAuthLog?: () => unknown }).lijstjesAuthLog =
+    readAuthLog;
+}
+
 export function useAuth() {
   const configured = isSupabaseConfigured;
 
@@ -122,12 +151,28 @@ export function useAuth() {
   async function init() {
     if (initStarted) return;
     initStarted = true;
+    exposeAuthLog();
     if (!supabase) {
       initialized.value = true;
       return;
     }
     try {
-      supabase.auth.onAuthStateChange((_event, session) => {
+      supabase.auth.onAuthStateChange((event, session) => {
+        // Diagnose voor onverwacht uitloggen: alleen eventnaam, tijdstip en
+        // of de gebruiker het zelf deed (geen tokens/e-mail, zie lib/authLog).
+        appendAuthLog(event, signOutRequested);
+        if (!session) lastSignOutUserInitiated = signOutRequested;
+        if (
+          import.meta.env?.DEV &&
+          event === "SIGNED_OUT" &&
+          !signOutRequested
+        ) {
+          // Dev-only diagnose (AGENTS.md §7.5/§9): onvrijwillig uitloggen.
+          console.warn(
+            "[auth] onvrijwillig SIGNED_OUT",
+            readAuthLog().slice(-5),
+          );
+        }
         user.value = session?.user ?? null;
       });
       const {
@@ -226,7 +271,13 @@ export function useAuth() {
 
   async function signOut(): Promise<void> {
     error.value = null;
-    await supabase?.auth.signOut();
+    signOutRequested = true;
+    lastSignOutUserInitiated = true;
+    try {
+      await supabase?.auth.signOut();
+    } finally {
+      signOutRequested = false;
+    }
     user.value = null;
     setRecovery(false);
     setJustVerified(false);

@@ -2,14 +2,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EMAIL_NOT_CONFIRMED, NETWORK_ERROR } from "../lib/errorMessages";
 
-const { mockSignUp, mockSignIn, mockResend, mockGetSession } = vi.hoisted(
-  () => ({
-    mockSignUp: vi.fn(),
-    mockSignIn: vi.fn(),
-    mockResend: vi.fn(),
-    mockGetSession: vi.fn(),
-  }),
-);
+const {
+  mockSignUp,
+  mockSignIn,
+  mockResend,
+  mockGetSession,
+  mockSignOut,
+  mockOnAuthStateChange,
+} = vi.hoisted(() => ({
+  mockSignUp: vi.fn(),
+  mockSignIn: vi.fn(),
+  mockResend: vi.fn(),
+  mockGetSession: vi.fn(),
+  mockSignOut: vi.fn(),
+  mockOnAuthStateChange: vi.fn(),
+}));
 
 vi.mock("../lib/supabase", () => ({
   supabase: {
@@ -17,18 +24,19 @@ vi.mock("../lib/supabase", () => ({
       signUp: mockSignUp,
       signInWithPassword: mockSignIn,
       resend: mockResend,
-      signOut: vi.fn(),
+      signOut: mockSignOut,
       updateUser: vi.fn(),
       resetPasswordForEmail: vi.fn(),
       setSession: vi.fn(),
-      onAuthStateChange: vi.fn(),
+      onAuthStateChange: mockOnAuthStateChange,
       getSession: mockGetSession,
     },
   },
   isSupabaseConfigured: true,
 }));
 
-import { useAuth } from "./useAuth";
+import { readAuthLog } from "../lib/authLog";
+import { useAuth, wasLastSignOutUserInitiated } from "./useAuth";
 
 describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)", () => {
   const AUTH = useAuth();
@@ -231,5 +239,78 @@ describe("useAuth — open registratie met e-mailverificatie (AGENTS.md §7.6)",
 
     expect(auth.initialized.value).toBe(true);
     expect(auth.user.value).toBeNull();
+  });
+});
+
+describe("useAuth — diagnose en herkomst van uitloggen", () => {
+  type Listener = (event: string, session: unknown) => void;
+  let listener: Listener;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    mockSignOut.mockReset();
+    mockOnAuthStateChange.mockReset();
+    mockGetSession.mockReset();
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    await useAuth().init();
+    listener = mockOnAuthStateChange.mock.calls.at(-1)?.[0] as Listener;
+  });
+
+  it("logt elk auth-event met eventnaam en tijdstip, zonder gebruikersgegevens", () => {
+    listener("TOKEN_REFRESHED", {
+      user: { id: "u1", email: "geheim@voorbeeld.nl" },
+      access_token: "tok",
+    });
+    listener("SIGNED_OUT", null);
+
+    const log = readAuthLog();
+    expect(log.map((e) => e.event)).toEqual(["TOKEN_REFRESHED", "SIGNED_OUT"]);
+    expect(JSON.stringify(log)).not.toMatch(/geheim|tok|u1/);
+  });
+
+  it("een SIGNED_OUT zonder signOut() is onvrijwillig", () => {
+    listener("SIGNED_OUT", null);
+
+    expect(readAuthLog().at(-1)).toMatchObject({
+      event: "SIGNED_OUT",
+      userInitiated: false,
+    });
+    expect(wasLastSignOutUserInitiated()).toBe(false);
+    expect(useAuth().user.value).toBeNull();
+  });
+
+  it("signOut() markeert het SIGNED_OUT-event als door de gebruiker gekozen", async () => {
+    mockSignOut.mockImplementation(() => {
+      listener("SIGNED_OUT", null);
+      return Promise.resolve({ error: null });
+    });
+
+    await useAuth().signOut();
+
+    expect(readAuthLog().at(-1)).toMatchObject({
+      event: "SIGNED_OUT",
+      userInitiated: true,
+    });
+    expect(wasLastSignOutUserInitiated()).toBe(true);
+  });
+
+  it("de vlag lekt niet door: na een eigen uitlog is de volgende sessie-einde weer onvrijwillig", async () => {
+    mockSignOut.mockResolvedValue({ error: null });
+    await useAuth().signOut();
+    expect(wasLastSignOutUserInitiated()).toBe(true);
+
+    listener("SIGNED_IN", { user: { id: "u1" } });
+    listener("SIGNED_OUT", null);
+
+    expect(wasLastSignOutUserInitiated()).toBe(false);
+    expect(readAuthLog().at(-1)?.userInitiated).toBe(false);
+  });
+
+  it("zet een debug-accessor op window die de log teruggeeft", () => {
+    listener("SIGNED_OUT", null);
+    const accessor = (window as unknown as { lijstjesAuthLog?: () => unknown })
+      .lijstjesAuthLog;
+    expect(typeof accessor).toBe("function");
+    expect(accessor?.()).toEqual(readAuthLog());
   });
 });
