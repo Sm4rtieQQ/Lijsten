@@ -114,9 +114,17 @@ async function pullFromServer(): Promise<string | null> {
 }
 registerPuller(pullFromServer);
 
-/** Wist alle state + per-user keys (uitloggen of gebruiker wisselen). */
-function reset(): void {
-  if (boundUser) clearUserData(boundUser, browserStorage);
+/**
+ * Wist de in-memory state en, tenzij `keepStoredData`, ook alle per-user keys
+ * (uitloggen of gebruiker wisselen). Met `keepStoredData` (onvrijwillig
+ * uitloggen) blijven cache en outbox van die gebruiker in localStorage staan,
+ * zodat dezelfde gebruiker ze bij de volgende login alsnog synchroniseert. Ze
+ * blijven per `userId` gescheiden: een andere gebruiker leest ze nooit.
+ */
+function reset(options: { keepStoredData?: boolean } = {}): void {
+  if (boundUser && !options.keepStoredData) {
+    clearUserData(boundUser, browserStorage);
+  }
   boundUser = null;
   hydrateToken.value += 1;
   lists.value = [];

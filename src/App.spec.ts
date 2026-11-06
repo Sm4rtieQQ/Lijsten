@@ -8,8 +8,10 @@ const {
   mockBindSyncUser,
   mockFlushNow,
   mockSyncIfStale,
+  mockUserInitiated,
   backFallback,
 } = vi.hoisted(() => ({
+  mockUserInitiated: vi.fn(() => false),
   mockFlushNow: vi.fn(() => Promise.resolve(true)),
   mockSyncIfStale: vi.fn(() => Promise.resolve()),
   auth: {} as Record<string, unknown>,
@@ -26,7 +28,10 @@ vi.mock("./composables/useBackNavigation", () => ({
   disposeBackButton: vi.fn(),
 }));
 
-vi.mock("./composables/useAuth", () => ({ useAuth: () => auth }));
+vi.mock("./composables/useAuth", () => ({
+  useAuth: () => auth,
+  wasLastSignOutUserInitiated: mockUserInitiated,
+}));
 vi.mock("./composables/useLists", () => ({ useLists: () => lists }));
 vi.mock("./composables/useSync", () => ({
   bindSyncUser: mockBindSyncUser,
@@ -48,6 +53,8 @@ beforeEach(() => {
   user.value = null;
   hydrate.mockClear();
   reset.mockClear();
+  mockUserInitiated.mockReset();
+  mockUserInitiated.mockReturnValue(false);
   mockBindSyncUser.mockClear();
   Object.assign(auth, {
     user,
@@ -98,6 +105,24 @@ describe("App — sessiewissel (AGENTS.md §8.13)", () => {
     await nextTick();
     expect(reset).toHaveBeenCalledTimes(2);
     expect(mockBindSyncUser).toHaveBeenLastCalledWith(null);
+  });
+
+  it("uitloggen door de gebruiker wist de opgeslagen gegevens, een onvrijwillig sessie-einde niet", async () => {
+    wrapper = shallowMount(App);
+    user.value = { id: "a" };
+    await nextTick();
+
+    mockUserInitiated.mockReturnValue(true);
+    user.value = null;
+    await nextTick();
+    expect(reset).toHaveBeenLastCalledWith({ keepStoredData: false });
+
+    user.value = { id: "a" };
+    await nextTick();
+    mockUserInitiated.mockReturnValue(false);
+    user.value = null;
+    await nextTick();
+    expect(reset).toHaveBeenLastCalledWith({ keepStoredData: true });
   });
 });
 
