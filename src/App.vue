@@ -9,7 +9,7 @@ import RegisterView from "./components/RegisterView.vue";
 import ResetPasswordView from "./components/ResetPasswordView.vue";
 import SplashView from "./components/SplashView.vue";
 import VerifyEmailView from "./components/VerifyEmailView.vue";
-import { useAuth } from "./composables/useAuth";
+import { useAuth, wasLastSignOutUserInitiated } from "./composables/useAuth";
 import {
   disposeBackButton,
   initBackButton,
@@ -142,7 +142,10 @@ watch(
   (nextId, prevId) => {
     if (!nextId) {
       stopHydrating();
-      reset();
+      // Alleen een uitlog-actie van de gebruiker wist de gegevens. Eindigt de
+      // sessie buiten hem om, dan blijven cache en outbox staan zodat niets van
+      // de nog niet verstuurde wijzigingen verloren gaat (§7.3).
+      reset({ keepStoredData: !wasLastSignOutUserInitiated() });
       bindSyncUser(null);
       sessionKey.value += 1;
       return;
