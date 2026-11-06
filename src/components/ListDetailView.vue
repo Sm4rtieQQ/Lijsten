@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { useArmedConfirm } from "../composables/useArmedConfirm";
+import { registerBackHandler } from "../composables/useBackNavigation";
+import { useDragReorder } from "../composables/useDragReorder";
 import { useLists } from "../composables/useLists";
+import ItemRow from "./ItemRow.vue";
 import SyncIndicator from "./SyncIndicator.vue";
 import type { ListItem } from "../types/app";
 
@@ -23,9 +26,36 @@ const list = computed(() => currentList());
 const newItemText = ref("");
 const editingItemId = ref<string | null>(null);
 const editingText = ref("");
-const editInputEl = ref<HTMLInputElement | null>(null);
-const draggingItemId = ref<string | null>(null);
-const dragOverItemId = ref<string | null>(null);
+
+// --- Slepen (items herschikken, §8.15): pointer-events + zwevende kopie ---
+const {
+  draggingId,
+  overId,
+  side,
+  ghost,
+  onHandlePointerDown,
+  cancel: cancelDrag,
+  dispose: disposeDrag,
+} = useDragReorder({
+  ids: () => list.value?.items.map((item) => item.id) ?? [],
+  onReorder: (ids) => {
+    const id = activeListId.value;
+    if (id) reorderItems(id, ids);
+  },
+});
+
+const draggedItem = computed(() =>
+  list.value?.items.find((item) => item.id === draggingId.value),
+);
+const ghostStyle = computed(() =>
+  ghost.value
+    ? {
+        left: `${ghost.value.left}px`,
+        top: `${ghost.value.top}px`,
+        width: `${ghost.value.width}px`,
+      }
+    : {},
+);
 
 const itemCount = computed(() => list.value?.items.length ?? 0);
 const doneCount = computed(
@@ -60,14 +90,29 @@ function clearCompletedItems(): void {
   if (id) clearCompleted(id);
 }
 
-onBeforeUnmount(dispose);
+/** Android-terugknop (§8.13): eerst bewerken annuleren, dan naar het overzicht. */
+function onBack(): boolean {
+  if (!activeListId.value) return false;
+  if (editingItemId.value) cancelEdit();
+  else goBack();
+  return true;
+}
+
+let offBack: (() => void) | null = null;
+onMounted(() => {
+  offBack = registerBackHandler(onBack);
+});
+onBeforeUnmount(() => {
+  dispose();
+  disposeDrag();
+  offBack?.();
+});
 
 // Bij schakelen naar een andere lijst alle lokale edit/drag-state resetten.
 watch(activeListId, () => {
   newItemText.value = "";
   editingItemId.value = null;
-  draggingItemId.value = null;
-  dragOverItemId.value = null;
+  cancelDrag();
   disarm();
 });
 
@@ -84,14 +129,6 @@ watch(
 );
 watch(canClear, (value) => {
   if (!value) disarm();
-});
-
-watch(editingItemId, (id) => {
-  if (!id) return;
-  nextTick(() => {
-    editInputEl.value?.focus();
-    editInputEl.value?.select();
-  });
 });
 
 function goBack(): void {
@@ -147,43 +184,6 @@ function onClearCompleted(): void {
   if (!canClear.value) return;
   // Eerste klik: wapenen. Tweede klik: afgevinkte items verwijderen.
   arm(CLEAR_KEY);
-}
-
-// --- Drag & drop (items herschikken) ---
-function onItemDragStart(item: ListItem, event: DragEvent): void {
-  draggingItemId.value = item.id;
-  event.dataTransfer?.setData("text/plain", item.id);
-}
-
-function onItemDragEnd(): void {
-  draggingItemId.value = null;
-  dragOverItemId.value = null;
-}
-
-function onItemDragOver(itemId: string): void {
-  if (draggingItemId.value && draggingItemId.value !== itemId) {
-    dragOverItemId.value = itemId;
-  }
-}
-
-function onItemDrop(targetId: string): void {
-  const id = activeListId.value;
-  const from = draggingItemId.value;
-  draggingItemId.value = null;
-  dragOverItemId.value = null;
-  if (!id || !from || from === targetId) return;
-
-  const current = list.value;
-  if (!current) return;
-  const ids = current.items.map((item) => item.id);
-  const fromIndex = ids.indexOf(from);
-  const toIndex = ids.indexOf(targetId);
-  if (fromIndex === -1 || toIndex === -1) return;
-  const next = [...ids];
-  const [moved] = next.splice(fromIndex, 1);
-  if (!moved) return;
-  next.splice(toIndex, 0, moved);
-  reorderItems(id, next);
 }
 </script>
 
@@ -256,104 +256,42 @@ function onItemDrop(targetId: string): void {
         </button>
       </div>
 
-      <!-- Bij `dragleave` alleen de `drag-over`-markering wissen; de sleep zelf
-           blijft actief tot `drop` of `dragend` (zelfde gedrag als legacy). -->
-      <ul
-        v-if="list.items.length"
-        class="items-list"
-        @dragleave="dragOverItemId = null"
-      >
-        <li
+      <ul v-if="list.items.length" class="items-list">
+        <ItemRow
           v-for="item in list.items"
           :key="item.id"
-          class="item"
-          :class="{
-            completed: item.done,
-            dragging: item.id === draggingItemId,
-            'drag-over': item.id === dragOverItemId,
-          }"
-          @dragend="onItemDragEnd"
-          @dragover.prevent="onItemDragOver(item.id)"
-          @drop.prevent="onItemDrop(item.id)"
-        >
-          <button
-            class="drag-handle"
-            type="button"
-            draggable="true"
-            aria-label="Sleep item om te verplaatsen"
-            @click.stop
-            @dragstart.stop="onItemDragStart(item, $event)"
-          >
-            <svg viewBox="0 0 16 20" aria-hidden="true">
-              <circle cx="5" cy="4" r="1.4" />
-              <circle cx="11" cy="4" r="1.4" />
-              <circle cx="5" cy="10" r="1.4" />
-              <circle cx="11" cy="10" r="1.4" />
-              <circle cx="5" cy="16" r="1.4" />
-              <circle cx="11" cy="16" r="1.4" />
-            </svg>
-          </button>
-          <button
-            class="check-button"
-            type="button"
-            :aria-label="
-              item.done ? 'Afvinken ongedaan maken' : 'Item afvinken'
-            "
-            @click="onToggle(item)"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m5 12 4 4L19 6" />
-            </svg>
-          </button>
-          <input
-            v-if="editingItemId === item.id"
-            ref="editInputEl"
-            v-model="editingText"
-            class="item-text"
-            type="text"
-            maxlength="160"
-            :aria-label="'Pas item aan: ' + item.text"
-            @keydown.enter.prevent="commitEdit(item.id)"
-            @keydown.esc.prevent="cancelEdit"
-            @blur="commitEdit(item.id)"
-          />
-          <span v-else class="item-text" @click="onToggle(item)">{{
-            item.text
-          }}</span>
-          <button
-            class="edit-button"
-            type="button"
-            aria-label="Item aanpassen"
-            @click.stop="startEdit(item)"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
-            </svg>
-          </button>
-          <button
-            class="item-delete-button"
-            :class="{ 'is-armed': isArmed(itemKey(item.id)) }"
-            type="button"
-            :aria-pressed="isArmed(itemKey(item.id)) ? 'true' : 'false'"
-            :aria-label="
-              isArmed(itemKey(item.id))
-                ? 'Bevestigen: item verwijderen'
-                : 'Item verwijderen'
-            "
-            @click.stop="onDeleteItem(item)"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13"
-              />
-            </svg>
-          </button>
-        </li>
+          v-model:edit-text="editingText"
+          :item="item"
+          :editing="editingItemId === item.id"
+          :armed="isArmed(itemKey(item.id))"
+          :dragging="item.id === draggingId"
+          :drop-side="item.id === overId ? side : null"
+          @toggle="onToggle(item)"
+          @start-edit="startEdit(item)"
+          @commit-edit="commitEdit(item.id)"
+          @cancel-edit="cancelEdit"
+          @delete="onDeleteItem(item)"
+          @handle-pointerdown="
+            (event, row) => onHandlePointerDown(item.id, event, row)
+          "
+        />
       </ul>
 
       <div v-else class="list-empty">
         Je lijstje is leeg. Voeg hierboven iets toe.
       </div>
+      <!-- Zwevende kopie van het gesleepte item (§8.15); geen klikdoel. -->
+      <Teleport to="body">
+        <ul
+          v-if="ghost && draggedItem"
+          class="items-list drag-ghost"
+          :style="ghostStyle"
+          aria-hidden="true"
+          inert
+        >
+          <ItemRow :item="draggedItem" ghost />
+        </ul>
+      </Teleport>
     </template>
   </section>
 </template>

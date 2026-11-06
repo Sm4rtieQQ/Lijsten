@@ -62,12 +62,20 @@ interface FauxClientOptions {
   shouldFail?: (call: Call) => boolean;
   /** Data die `select` teruggeeft (voor pull-tests). */
   selectData?: unknown;
+  /**
+   * Bestaan de functies uit supabase/reorder.sql? Standaard niet (zoals vóór
+   * het uitvoeren van het script): de app valt dan terug op per-item-updates.
+   */
+  rpcAvailable?: boolean;
 }
 
 /** Nep-Supabase-client die alle calls registreert en optioneel faalt. */
 function makeFauxClient(options: FauxClientOptions = {}): {
   calls: Call[];
-  backend: { from: (table: string) => unknown };
+  backend: {
+    from: (table: string) => unknown;
+    rpc: (fn: string, args: unknown) => Promise<unknown>;
+  };
 } {
   const calls: Call[] = [];
 
@@ -104,6 +112,7 @@ function makeFauxClient(options: FauxClientOptions = {}): {
       delete: () => typeof chain;
       select: (cols: unknown) => typeof chain;
       eq: (key: string, value: unknown) => typeof chain;
+      in: (key: string, values: unknown) => typeof chain;
       order: (column: string, opts?: { ascending?: boolean }) => typeof chain;
       then: (
         onFulfilled: (v: unknown) => unknown,
@@ -132,6 +141,10 @@ function makeFauxClient(options: FauxClientOptions = {}): {
         row = cols;
         return chain;
       },
+      in: (key: string, values: unknown) => {
+        filters.push([`${key}:in`, values]);
+        return chain;
+      },
       eq: (key: string, value: unknown) => {
         filters.push([key, value]);
         return chain;
@@ -145,7 +158,29 @@ function makeFauxClient(options: FauxClientOptions = {}): {
     return chain;
   };
 
-  return { calls, backend: { from } };
+  const rpc = (fn: string, args: unknown) => {
+    const call: Call = {
+      table: fn,
+      op: "rpc",
+      filters: [],
+      orders: [],
+      row: args,
+    };
+    calls.push(call);
+    if (!options.rpcAvailable) {
+      return Promise.resolve({
+        data: null,
+        error: { code: "PGRST202", message: "Could not find the function" },
+      });
+    }
+    const fail = options.shouldFail ? options.shouldFail(call) : false;
+    return Promise.resolve({
+      data: null,
+      error: fail ? { message: `fake-failure:rpc:${fn}` } : null,
+    });
+  };
+
+  return { calls, backend: { from, rpc } };
 }
 
 let passed = 0;
@@ -223,7 +258,12 @@ async function testOutboxPerEntityNoBulkWipe(): Promise<void> {
     [
       entry({ type: "list.create", listId: "L1", title: "Boodschappen" }),
       entry({ type: "item.create", item: i1 }),
-      entry({ type: "item.update", item: { ...i1, done: true } }),
+      // Een al bestaand item (I3): een update van I1 zelf zou nu met de
+      // create worden samengevoegd (§7.3, zie testCompactionBeforeFlush).
+      entry({
+        type: "item.update",
+        item: { ...item("I3", "L1", "brood"), done: true },
+      }),
       entry({ type: "item.delete", itemId: "I2", listId: "L1" }),
       entry({ type: "list.delete", listId: "L1" }),
     ],
@@ -474,6 +514,291 @@ async function testReorderOperations(): Promise<void> {
 // 8. pull sorteert lijsten op position (created_at als tiebreak)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Samenvoegen vóór het versturen (§7.3)
+// ---------------------------------------------------------------------------
+
+async function testCompactionBeforeFlush(): Promise<void> {
+  const mem = memoryStorage();
+  // Na het uitvoeren van supabase/reorder.sql: de reorder is één rpc-call.
+  const faux = makeFauxClient({ rpcAvailable: true });
+  const i1 = item("I1", "L1", "melk");
+  const i2 = item("I2", "L1", "brood");
+
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "item.create", item: i1 }),
+      entry({ type: "item.update", item: { ...i1, done: true } }),
+      entry({
+        type: "item.update",
+        item: { ...i1, done: true, text: "havermelk" },
+      }),
+      entry({ type: "item.create", item: i2 }),
+      entry({ type: "item.delete", itemId: "I2", listId: "L1" }),
+      entry({ type: "item.reorder", listId: "L1", itemIds: ["I1"] }),
+      entry({ type: "item.reorder", listId: "L1", itemIds: ["I1"] }),
+    ],
+    mem,
+  );
+
+  const result = await flushOutbox("userA", client(faux.backend), mem);
+  assert(result.ok, "samengevoegde flush slaagt");
+  assert(
+    result.syncedCount === 2,
+    `2 operaties na samenvoegen (kreeg ${result.syncedCount})`,
+  );
+
+  const ops = faux.calls.map((c) => `${c.op}:${c.table}`);
+  assert(
+    JSON.stringify(ops) ===
+      JSON.stringify(["insert:list_items", "rpc:reorder_items"]),
+    `één insert met de eindstand + één reorder (kreeg: ${ops.join(", ")})`,
+  );
+  const inserted = faux.calls[0]?.row as { text?: string; done?: boolean };
+  assert(
+    inserted.text === "havermelk" && inserted.done === true,
+    "de insert bevat de laatste tekst en status",
+  );
+  assert(
+    !faux.calls.some((c) => c.op === "delete"),
+    "aangemaakt én verwijderd item komt nooit op de server",
+  );
+  assert(
+    loadQueue("userA", mem).length === 0,
+    "outbox leeg na samenvoegen + flush",
+  );
+
+  // Een gefaalde create (kan na een timeout tóch op de server staan) wordt
+  // niet samengevoegd: de delete blijft en gaat mee.
+  const mem2 = memoryStorage();
+  const faux2 = makeFauxClient();
+  saveQueue(
+    "userA",
+    [
+      {
+        ...entry({ type: "item.create", item: i2 }),
+        attempts: 1,
+        lastError: "x",
+      },
+      entry({ type: "item.delete", itemId: "I2", listId: "L1" }),
+    ],
+    mem2,
+  );
+  await flushOutbox("userA", client(faux2.backend), mem2);
+  assert(
+    faux2.calls.map((c) => c.op).join(",") === "insert,delete",
+    "gefaalde create blijft staan; de delete gaat mee",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Wachtrij na een run: verstuurd eruit, tussendoor toegevoegd blijft
+// ---------------------------------------------------------------------------
+
+async function testFlushSettlesQueue(): Promise<void> {
+  // (a) Fout ná een geslaagde operatie: de geslaagde komt niet terug.
+  const mem = memoryStorage();
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "list.create", listId: "L1", title: "X" }),
+      entry({ type: "item.create", item: item("I1", "L1", "melk") }),
+    ],
+    mem,
+  );
+  const failing = makeFauxClient({
+    shouldFail: (call) => call.table === "list_items",
+  });
+  const first = await flushOutbox("userA", client(failing.backend), mem);
+  assert(!first.ok, "tweede operatie faalt");
+  const queued = loadQueue("userA", mem);
+  assert(
+    queued.length === 1 && queued[0]?.type === "item.create",
+    `alleen de gefaalde operatie blijft staan (kreeg: ${queued.map((e) => e.type).join(", ")})`,
+  );
+
+  const ok = makeFauxClient();
+  await flushOutbox("userA", client(ok.backend), mem);
+  assert(
+    ok.calls.map((c) => `${c.op}:${c.table}`).join(",") === "insert:list_items",
+    "de retry verstuurt de al geslaagde list.create niet opnieuw",
+  );
+
+  // (b) Een wijziging tíjdens het versturen blijft in de wachtrij.
+  const mem2 = memoryStorage();
+  saveQueue(
+    "userA",
+    [entry({ type: "list.create", listId: "L2", title: "Y" })],
+    mem2,
+  );
+  let added = false;
+  const midway = makeFauxClient({
+    shouldFail: () => {
+      if (!added) {
+        added = true;
+        const now = loadQueue("userA", mem2);
+        saveQueue(
+          "userA",
+          [...now, entry({ type: "list.update", listId: "L2", title: "Z" })],
+          mem2,
+        );
+      }
+      return false;
+    },
+  });
+  const result = await flushOutbox("userA", client(midway.backend), mem2);
+  const rest = loadQueue("userA", mem2);
+  assert(result.ok, "run slaagt");
+  assert(
+    rest.length === 1 && rest[0]?.type === "list.update",
+    "wijziging tijdens het versturen gaat niet verloren",
+  );
+  assert(
+    result.queue.length === 1,
+    "het resultaat meldt de resterende wachtrij",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gebundelde requests (§7.3)
+// ---------------------------------------------------------------------------
+
+async function testBatchedRequests(): Promise<void> {
+  // 10 nieuwe items (zoals addItem ze maakt: steeds één lager) → 1 insert.
+  const mem = memoryStorage();
+  const faux = makeFauxClient();
+  const created = Array.from({ length: 10 }, (_, i) =>
+    entry({
+      type: "item.create",
+      item: { ...item(`N${i}`, "L1", `item ${i}`), position: -1 - i },
+    }),
+  );
+  saveQueue("userA", created, mem);
+  const result = await flushOutbox("userA", client(faux.backend), mem);
+  assert(result.ok && result.syncedCount === 10, "10 creates verwerkt");
+  assert(
+    faux.calls.length === 1,
+    `10 nieuwe items = 1 request (kreeg ${faux.calls.length})`,
+  );
+  const rows = faux.calls[0]?.row as Array<{ id: string; position: number }>;
+  assert(
+    Array.isArray(rows) && rows.length === 10 && rows[9]?.position === -10,
+    "de insert bevat alle 10 rijen met hun positie",
+  );
+
+  // "Verwijder afgevinkt": deletes van één lijst → 1 delete, met id- én lijstfilter.
+  const mem2 = memoryStorage();
+  const faux2 = makeFauxClient();
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "item.delete", itemId: "D1", listId: "L1" }),
+      entry({ type: "item.delete", itemId: "D2", listId: "L1" }),
+      entry({ type: "item.delete", itemId: "D3", listId: "L2" }),
+    ],
+    mem2,
+  );
+  await flushOutbox("userA", client(faux2.backend), mem2);
+  assert(faux2.calls.length === 2, "deletes per lijst gebundeld (2 requests)");
+  const bundled = faux2.calls[0];
+  assert(
+    !!bundled &&
+      bundled.filters.some(
+        ([key, value]) =>
+          key === "id:in" && JSON.stringify(value) === '["D1","D2"]',
+      ) &&
+      bundled.filters.some(
+        ([key, value]) => key === "list_id" && value === "L1",
+      ),
+    "gebundelde delete: id-filter (geen bulk-wipe) + lijstfilter",
+  );
+
+  // Mislukte bundel: alle operaties gemarkeerd, niets verstuurd uit de wachtrij.
+  const mem3 = memoryStorage();
+  saveQueue("userA", created.slice(0, 3), mem3);
+  const failing = makeFauxClient({ shouldFail: () => true });
+  const failed = await flushOutbox("userA", client(failing.backend), mem3);
+  const left = loadQueue("userA", mem3);
+  assert(
+    !failed.ok && failing.calls.length === 1,
+    "één mislukt gebundeld request",
+  );
+  assert(
+    left.length === 3 &&
+      left.every((e) => e.attempts === 1 && e.lastError !== null),
+    "alle 3 operaties uit de bundel staan gemarkeerd in de wachtrij",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Volgorde via de databasefunctie, met terugval (§7.3, supabase/reorder.sql)
+// ---------------------------------------------------------------------------
+
+async function testReorderViaRpc(): Promise<void> {
+  const reorders = (): OutboxEntry[] => [
+    entry({ type: "item.reorder", listId: "L1", itemIds: ["I3", "I1", "I2"] }),
+    entry({ type: "list.reorder", listIds: ["L2", "L1"] }),
+  ];
+
+  // Functies bestaan: één rpc-call per reorder, geen updates per item.
+  const mem = memoryStorage();
+  const faux = makeFauxClient({ rpcAvailable: true });
+  saveQueue("userA", reorders(), mem);
+  const result = await flushOutbox("userA", client(faux.backend), mem);
+  assert(result.ok, "reorders via rpc slagen");
+  assert(
+    faux.calls.map((c) => `${c.op}:${c.table}`).join(",") ===
+      "rpc:reorder_items,rpc:reorder_lists",
+    "één rpc-call per reorder, geen per-item-updates",
+  );
+  assert(
+    JSON.stringify(faux.calls[0]?.row) ===
+      JSON.stringify({ p_list_id: "L1", p_item_ids: ["I3", "I1", "I2"] }),
+    "reorder_items krijgt lijst-id en volgorde",
+  );
+  assert(
+    JSON.stringify(faux.calls[1]?.row) ===
+      JSON.stringify({ p_list_ids: ["L2", "L1"] }),
+    "reorder_lists krijgt de lijstvolgorde",
+  );
+
+  // Functies bestaan (nog) niet: terugval, en daarna niet steeds opnieuw proberen.
+  const mem2 = memoryStorage();
+  const missing = makeFauxClient();
+  saveQueue("userA", reorders(), mem2);
+  const fallback = await flushOutbox("userA", client(missing.backend), mem2);
+  assert(fallback.ok, "terugval op per-item-updates slaagt");
+  const rpcCalls = missing.calls.filter((c) => c.op === "rpc").length;
+  const updates = missing.calls.filter((c) => c.op === "update").length;
+  assert(
+    rpcCalls === 1,
+    `één mislukte rpc-poging, daarna onthouden (kreeg ${rpcCalls})`,
+  );
+  assert(updates === 5, `terugval: 3 + 2 updates (kreeg ${updates})`);
+
+  // Een echte fout van de functie: geen terugval, wel een NL-fout + retry.
+  const mem3 = memoryStorage();
+  const failing = makeFauxClient({
+    rpcAvailable: true,
+    shouldFail: (call) => call.op === "rpc",
+  });
+  saveQueue("userA", reorders().slice(0, 1), mem3);
+  const failed = await flushOutbox("userA", client(failing.backend), mem3);
+  assert(
+    !failed.ok && failed.error !== null,
+    "rpc-fout → mislukt met NL-tekst",
+  );
+  assert(
+    !failing.calls.some((c) => c.op === "update"),
+    "bij een echte fout geen terugval (anders half opgeslagen)",
+  );
+  assert(
+    loadQueue("userA", mem3)[0]?.attempts === 1,
+    "reorder blijft gemarkeerd staan",
+  );
+}
+
 async function testPullOrder(): Promise<void> {
   const faux = makeFauxClient({
     selectData: [
@@ -548,6 +873,10 @@ async function main(): Promise<void> {
   testBackoff();
   await testReorderOperations();
   await testPullOrder();
+  await testCompactionBeforeFlush();
+  await testFlushSettlesQueue();
+  await testBatchedRequests();
+  await testReorderViaRpc();
   testExactTitleMatch();
 
   console.log(

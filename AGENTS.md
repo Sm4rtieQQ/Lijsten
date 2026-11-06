@@ -4,7 +4,7 @@
 
 ## 1. Doel & werkwijze
 
-- Lees altijd eerst `tasks.md` en het actieve planbestand (`tasks_03.md`) voordat je begint met implementeren.
+- Lees altijd eerst `docs/tasks.md` en het actieve planbestand (`docs/tasks_06.md`) voordat je begint met implementeren.
 - Werk **web-first**: bouw en test eerst in de browser (`npm run dev`). De Android-export gebeurt **alleen** nadat de gebruiker expliciet heeft aangegeven dat de webversie goed is.
 - Houd veranderingen klein en testbaar. Eén taak per keer, en zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond en getest.
 - Nieuwe of gewijzigde **logica hoort getest te worden met vitest** (`npm run test`), naast handmatig testen in de browser.
@@ -41,7 +41,7 @@
 | `npm run format`        | Voert Prettier uit over de codebase (of alleen gewijzigde bestanden).                                                                                          |
 | `npm run format:check`  | Controleert of alles al geformat is (zonder te schrijken).                                                                                                     |
 
-> **Let op:** `npm run test` en `npm run test:watch` bestaan sinds fase G (vitest + `@vue/test-utils` + `jsdom`, zie `task_02.md`). Spec-bestanden (`*.spec.ts`) staan naast de code en worden door `vue-tsc -b` strikt meegetypecheckt. Zie ook §5: `onMounted` hoort in de component, zodat composables testbaar blijven.
+> **Let op:** `npm run test` en `npm run test:watch` bestaan sinds fase G (vitest + `@vue/test-utils` + `jsdom`, zie `docs/task_02.md`). Spec-bestanden (`*.spec.ts`) staan naast de code en worden door `vue-tsc -b` strikt meegetypecheckt. Zie ook §5: `onMounted` hoort in de component, zodat composables testbaar blijven.
 
 > **Let op bij Android-APK's:** er is geen `npm run android:debug`. Voor een **debug**-APK (snel testen/sideload, ondertekend met het systeem debug keystore) gebruik je `./gradlew assembleDebug` vanuit `android/`, of `npx cap run android` voor directe installatie op een device. `npm run android:build` bouwt een _release_-APK; die is ondertekend zolang `android/keystore.properties` bestaat (anders ongetekend en niet installeerbaar). Zie §10.2.
 
@@ -56,9 +56,14 @@ Lijsten/
 ├── .gitignore
 ├── .prettierrc.json
 ├── AGENTS.md               # Deze file
-├── tasks.md                # Voortgang per fase (verwijst naar het actieve plan)
-├── task_02.md              # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
-├── tasks_03.md             # Actief plan: open registratie + e-mailverificatie
+├── docs/
+│   ├── tasks.md            # Voortgang per fase (verwijst naar het actieve plan)
+│   ├── task_02.md          # Afgerond plan: fase 5 (uitnodiging, dubbele bevestiging, laadscherm, UI-fixes)
+│   ├── tasks_03.md         # Plan fase 6: open registratie + e-mailverificatie
+│   ├── tasks_04.md         # Refactor (gedrag ongewijzigd)
+│   ├── tasks_05.md         # Plan fase 8: navigatie, synchroniseren en slepen (N6 wacht op akkoord)
+│   └── tasks_06.md         # Actief plan: minder verkeer tussen app en server
+├── .gitattributes          # eol=lf, zodat Prettier ook op Windows schoon is
 ├── index.html              # Vite entry (fonts + PWA-/iOS-meta)
 ├── package.json
 ├── capacitor.config.json   # webDir: dist
@@ -66,8 +71,10 @@ Lijsten/
 ├── tsconfig.json           # Project references (app + node)
 ├── tsconfig.app.json
 ├── tsconfig.node.json
-├── supabase-schema.sql     # Schema + RLS voor lists/list_items (idem uitvoerbaar)
-├── supabase-verification.sql  # Sjabloon voor e-mailverificatie (invite eruit + RLS-grendel + beheer)
+├── supabase/               # SQL voor de SQL Editor van Supabase, in deze volgorde uitvoeren:
+│   ├── schema.sql          # 1. Schema + RLS voor lists/list_items (idempotent)
+│   ├── verification.sql    # 2. E-mailverificatie: RLS-grendel + checklist instellingen
+│   └── reorder.sql         # 3. Functies reorder_items/reorder_lists: volgorde in één request (§7.3)
 ├── public/                 # PWA-assets: manifest.webmanifest, sw.js, icons/, favicon.svg
 ├── .github/workflows/      # CI: deploy naar GitHub Pages (deploy-pages.yml)
 ├── scripts/
@@ -78,6 +85,9 @@ Lijsten/
 │   ├── styles.css          # Geïmporteerd in main.ts — alle styling
 │   ├── env.d.ts            # TypeScript env types
 │   ├── components/
+│   │   ├── AuthCard.vue          # Gedeelde kaart van de auth-schermen
+│   │   ├── PasswordInput.vue     # Wachtwoordveld met oog-toggle
+│   │   ├── icons/                # Gedeelde SVG-iconen (sleephandvat, prullenbak)
 │   │   ├── SplashView.vue        # Laadscherm (staat bij het opstarten)
 │   │   ├── LoginView.vue         # Inloggen + knop Registreren
 │   │   ├── RegisterView.vue      # Open registratie (zonder token)
@@ -85,7 +95,10 @@ Lijsten/
 │   │   ├── ResetPasswordView.vue # Nieuw wachtwoord na herstel-link
 │   │   ├── HomeView.vue          # Lijstoverzicht + accountmenu
 │   │   ├── ListDetailView.vue    # Lijstweergave, items, verwijderen
+│   │   ├── ListCard.vue          # Lijstkaart (ook als zwevende kopie, §8.15)
+│   │   ├── ItemRow.vue           # Item-rij (ook als zwevende kopie, §8.15)
 │   │   ├── ConfirmDeleteDialog.vue
+│   │   ├── PullToRefresh.vue     # Swipe-omlaag-indicator + touch-listeners (§8.14)
 │   │   ├── SyncIndicator.vue
 │   │   └── *.spec.ts            # Vitest-tests staan naast de code
 │   ├── composables/
@@ -93,6 +106,9 @@ Lijsten/
 │   │   ├── useLists.ts
 │   │   ├── useSync.ts
 │   │   ├── useArmedConfirm.ts    # Twee-staps bevestiging (§8.6)
+│   │   ├── useBackNavigation.ts  # Android-terugknop: handler-stapel + minimize (§8.13)
+│   │   ├── usePullToRefresh.ts   # Swipe omlaag: toestandsmachine (§8.14)
+│   │   ├── useDragReorder.ts     # Slepen: pointer-events + zwevende kopie (§8.15)
 │   │   ├── useDeepLink.ts        # Deep link: bevestiging + herstel (§8.11)
 │   │   └── *.spec.ts
 │   ├── pwa/
@@ -101,7 +117,11 @@ Lijsten/
 │       ├── supabase.ts
 │       ├── database.types.ts   # Centrale Supabase Database types (lists, list_items)
 │       ├── urlParams.ts        # Pure URL-parser voor deep links (§8.11)
+│       ├── platform.ts         # Native-detectie + redirect-doel van de mails
+│       ├── validation.ts       # Wachtwoord-/e-mailvalidatie (één bron)
+│       ├── outbox.ts           # Pure outbox-helpers (entry, prune, retry)
 │       ├── storage.ts          # Per-user storage + outbox
+│       ├── authLog.ts          # Ring buffer van auth-events (diagnose onverwacht uitloggen, §7.1)
 │       ├── sync.ts             # Offline-first sync logica
 │       ├── errorMessages.ts    # Fout -> leesbare NL-tekst (§7.5)
 │       └── utils.ts
@@ -144,16 +164,18 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 
 ### 7.1 Kernprincipes
 
-- **Per-user cache.** Elke `localStorage`-key is **per `userId`**: `lijstjes:data:<userId>`, `lijstjes:queue:<userId>`. **Nooit** een globale key zonder userId. Bij uitloggen wordt alle state van die sessie geleegd.
+- **Per-user cache.** Elke `localStorage`-key is **per `userId`**: `lijstjes:data:<userId>`, `lijstjes:queue:<userId>`, `lijstjes:sync:<userId>` en `lijstjes:view:<userId>` (laatst bezochte pagina, §8.13). **Nooit** een globale key zonder userId (enige uitzondering: de auth-diagnoselog zonder persoonsgegevens, hieronder). Bij uitloggen door de gebruiker wordt alle state van die sessie geleegd; bij een onvrijwillig sessie-einde blijven cache en outbox bewust staan (hieronder).
 - **Server als gedeelde bron, client offline-first.** Wijzigingen gaan eerst naar de lokale cache + een operationele outbox (queue). Sync pusht de outbox naar Supabase in order.
 - **Nooit bulk-wipe naar server.** `syncToSupabase()` in de oude code deed `DELETE` van alle lijsten van de gebruiker en her-insertte alles — dat is de oorzaak van het cross-user datalek. **Deze destructieve bulk-sync wordt niet overgenomen.** Gebruik per-entiteit operaties (create/update/delete) vanuit de outbox.
-- **Defense in depth:** queries filteren **expliciet** op `owner_id = auth.uid()` waar mogelijk, en RLS blijft tweede beveiligingslaag (zoals in `supabase-schema.sql`).
+- **Defense in depth:** queries filteren **expliciet** op `owner_id = auth.uid()` waar mogelijk, en RLS blijft tweede beveiligingslaag (zoals in `supabase/schema.sql`).
 - **Cross-user isolatie:** bij wisselen van gebruiker wordt de cache van de vorige gebruiker nooit gelezen of gemengd. LocalStorage wordt per-user gescheiden.
-- **Leeg account na uitloggen:** `lists`, `activeListId`, outbox en alle per-user keys worden gewist bij `signOut()`. Geen voorbeelddata wordt automatisch geladen voor ingelogde gebruikers (zie sectie 8).
+- **Leeg account na uitloggen:** `lists`, `activeListId`, outbox en alle per-user keys worden gewist bij `signOut()` (uitloggen door de gebruiker; zie de uitzondering hieronder). Geen voorbeelddata wordt automatisch geladen voor ingelogde gebruikers (zie sectie 8).
+- **Alleen een uitlog-actie van de gebruiker wist de per-user keys.** Eindigt de sessie buiten hem om (`SIGNED_OUT` zonder `signOut()`: refresh-token geweigerd, sessielimiet, opslag gewist, uitgelogd in een ander tabblad), dan wist `App.vue` alleen de in-memory state (`reset({ keepStoredData: true })`); cache en outbox blijven per `userId` staan en worden bij de volgende login van dezelfde gebruiker gesynchroniseerd. Een andere gebruiker leest ze nooit (keys zijn per `userId`). Of het uitloggen van de gebruiker kwam, houdt `useAuth` bij (`wasLastSignOutUserInitiated()`); bij twijfel blijven de gegevens staan.
+- **Auth-diagnose:** `useAuth` logt elk `onAuthStateChange`-event (naam, tijdstip, `userInitiated`) in een ring buffer van de laatste 20 in `localStorage` (`lijstjes:authlog`, `lib/authLog.ts`; bewust de enige globale key: geen tokens, e-mail of id's). Uitlezen in de console: `lijstjesAuthLog()`. In dev komt een onvrijwillige `SIGNED_OUT` ook als `console.warn`.
 
 ### 7.2 Database types
 
-- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
+- `src/lib/database.types.ts` definieert het `Database` type voor Supabase (tabellen `lists`, `list_items`, inclusief relaties, en de functies `reorder_items`/`reorder_lists` uit `supabase/reorder.sql`). Gebruik deze types in alle Supabase-calls (`from<'lists'>`, etc.) voor end-to-end type safety.
 - Het uitnodigingssysteem (`invites`, `invite_claims`, `claim_invite`) is **verwijderd**; die types bestaan niet meer.
 - Domeinmodellen (`List`, `ListItem`) in `src/types/app.ts` — gescheiden van DB-shape waar zinvol.
 
@@ -162,7 +184,13 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 - Outbox bevat operations in **FIFO**-volgorde, per user: `type OutboxOp = CreateList | UpdateList | DeleteList | CreateItem | UpdateItem | DeleteItem | ReorderLists | ReorderItems` (discriminated union in `src/types/sync.ts`).
 - Elke operatie heeft een unieke `opId`, `timestamp`, en bevat genoeg data om idempotent te kunnen verwerken.
 - Sync probeert operations één voor één of in logische batches, handelt fouten netjes af (retry met backoff), markeert failed operations met `error` + `attempts`, en toont deze in de UI (sync-status).
-- Bij succesvolle sync wordt de outbox opgeschoond voor voltooide operaties. Lokale state blijft de bron totdat server bevestigt waar nodig.
+- Na een run haalt `flushOutbox` **alleen de verstuurde operaties** uit de wachtrij, vanuit de wachtrij zoals die op dat moment is: wat tijdens het versturen is toegevoegd blijft staan, en een al verstuurde operatie komt nooit terug (anders wordt hij bij de retry dubbel verstuurd). Lokale state blijft de bron totdat server bevestigt waar nodig.
+- **Versturen 30 s na de laatste wijziging** (`FLUSH_DEBOUNCE_MS` in `useSync`), om verkeer te sparen: elke mutatie (`markDirty`) start de timer opnieuw, zodat een reeks wijzigingen samen vertrekt. Bij doorlopend bewerken wordt er uiterlijk **2 min** na de eerste nog niet verstuurde wijziging toch verstuurd (`MAX_FLUSH_WAIT_MS`). Meteen versturen (de timer vervalt): de pill en de swipe (volledige sync), het `online`-event, de app naar de achtergrond (`visibilitychange` → `hidden`, `flushNow`, best effort) en uitloggen.
+- **Uitloggen door de gebruiker wist de outbox** (§7.1; een onvrijwillig sessie-einde niet), dus `HomeView` roept eerst `flushBeforeSignOut()` aan. Blijven er wijzigingen achter (offline of fout), dan wordt `Uitloggen` gewapend volgens §8.6 (`Toch uitloggen`, met de melding `Niet alle wijzigingen zijn verstuurd. Ze gaan verloren als je nu uitlogt.`); pas de tweede klik logt uit. Menu sluiten heft de bevestiging op.
+- **Samenvoegen vóór het versturen** (`compactOutbox` in `lib/outbox.ts`, aangeroepen aan het begin van `flushOutbox`): item aangemaakt en daarna gewijzigd → één `item.create` met de eindstand; meerdere updates van één item → alleen de laatste; aangemaakt en weer verwijderd → beide weg; lijst aangemaakt en hernoemd → één `list.create`; meerdere reorders van één lijst (of van de lijstvolgorde) → alleen de laatste, op de plek van de laatste. **Alleen nog nooit geprobeerde operaties** worden samengevoegd of geschrapt: een gefaalde operatie kan na een timeout tóch op de server zijn aangekomen en blijft ongemoeid. De samengevoegde wachtrij wordt meteen opgeslagen.
+- **Gebundelde requests** (`nextBatch` in `lib/outbox.ts`, FIFO blijft gelden): opeenvolgende `item.create` gaan als één insert met alle rijen, opeenvolgende `item.delete` van dezelfde lijst als één `delete().in("id", ids).eq("list_id", …)` — altijd met id-filter, dus nooit een bulk-wipe. Hooguit `MAX_BATCH_SIZE` (100) per bundel; al het andere gaat alleen. Een operatie die de **server** weigerde (duplicaat, geen toegang, onbekend) gaat voortaan alleen; na een netwerkfout of timeout mag hij weer mee in een bundel. Mislukt een bundel, dan worden al zijn operaties gemarkeerd en opnieuw geprobeerd met backoff.
+- **Item toevoegen herschikt de lijst niet.** Het nieuwe item komt bovenaan met positie `bovenste positie − 1` (negatief mag; server en pull sorteren op `position`), dus alleen een `item.create` en geen `item.reorder`. Slepen nummert de lijst wel opnieuw door.
+- **Volgorde opslaan in één request:** `item.reorder` en `list.reorder` roepen de databasefuncties `reorder_items` / `reorder_lists` aan (`supabase/reorder.sql`, `security invoker`: de RLS-regels gelden onverkort). Eén statement, dus alles of niets — een verbroken verbinding laat geen half opgeslagen volgorde meer achter. Bestaan de functies (nog) niet (`PGRST202`/`42883`), dan valt de app terug op één update per item en onthoudt dat per client. Een échte fout van de functie valt **niet** terug, maar wordt gemarkeerd en opnieuw geprobeerd.
 
 ### 7.4 Sync-indicator (vereist)
 
@@ -170,12 +198,13 @@ De **sync-interface** (`SyncIndicator.vue`) staat **rechtsboven** en is bewust *
 
 - **Bezig (`syncing`) → alleen een spinner.** Geen tekst, geen kleur, geen tijd. De pill is dan niet klikbaar.
 - **Idle (`synced`) → groen**: groene dot + `Gesynchroniseerd`, met het tijdstip van de laatste succesvolle sync er naast.
-- **Wachtrijst (`pending`) → geel/amber**: dot + `In wachtrijst` (outbox niet leeg, nog niet verzonden).
+- **Wachtrij (`pending`) → geel/amber**: dot + `In wachtrij` (outbox niet leeg, nog niet verzonden). Door de wachttijd van §7.3 staat de pill na elke wijziging tot 30 s op `In wachtrij`; de gebruiker kan zelf eerder synchroniseren met de pill of de swipe.
 - **Fout (`error`) → rood**: rode dot + `Fout bij synchroniseren`. **Er staat geen tekst onder de pill** — de foutmelding en mislukte operaties worden niet in de UI getoond (bewuste keuze van de gebruiker); de status is alleen zichtbaar via de pill zelf.
 - **Inklappen:** na 1,5 seconden stabiele status verdwijnt het tekstlabel en blijft alleen de dot over. Dat geldt **zowel voor `synced` als voor `error`** — dezelfde `COLLAPSE_AFTER_MS`-timer en dezelfde `.sync-row.is-collapsed`-regels, dus één implementatie voor beide statussen. Bij `error` blijft de rode dot staan.
 - **Tijdstip:** het korte tijdstip staat naast de pill, de volledige NL-tijdstaat in de `title`-tooltip.
-- **Actie:** de pill zelf is de knop — `Synchroniseer nu`, of `Probeer opnieuw` wanneer er een fout is (retry van failed operations). De `aria-label` bevat status, actie en het laatste sync-tijdstip.
-- **Geen "Verversen"-knop** meer (noch in het accountmenu, noch in de detailheader). De cloud wordt ingehaald bij inloggen/hydrateren en wanneer de gebruiker terugkomt op het tabblad (`visibilitychange` in `App.vue`).
+- **Actie:** de pill zelf is de knop — `Synchroniseer nu`, of `Probeer opnieuw` wanneer er een fout is (retry van failed operations). Een klik doet een **volledige sync** (`syncWithServer`: outbox pushen en daarna de server binnenhalen), ook als de pill is ingeklapt tot alleen de dot. De klikzone is minimaal 44×44 px via een transparante rand van 13px met een negatieve marge; de pill oogt daardoor niet groter. De `aria-label` bevat status, actie en het laatste sync-tijdstip.
+- **Eén sync-functie.** Alles wat de gebruiker als synchroniseren ziet — de pill, terugkeren naar de app/het tabblad (`visibilitychange` in `App.vue`), het opstarten (`hydrate`) en de swipe omlaag (§8.14) — loopt via `syncWithServer()` in `useSync`. Er draait er hooguit één tegelijk; de pill staat de hele tijd op `syncing` en eindigt op `synced` of `error`. Een mislukte pull maakt de pill rood tot de volgende sync. De pull zelf staat in `useLists` en wordt met `registerPuller` aangemeld (geen circulaire import). Pushen na een mutatie (na de wachttijd van §7.3), retry/backoff en het `online`-event blijven alleen de outbox flushen (`runFlush`).
+- **Geen "Verversen"-knop** meer (noch in het accountmenu, noch in de detailheader). De cloud wordt ingehaald bij inloggen/hydrateren, wanneer de gebruiker terugkomt op het tabblad en via de pill. De automatische pull bij terugkeren gebeurt **hooguit één keer per 30 s** (`syncWithServerIfStale`, gerekend vanaf de vorige volledige sync); de pill en de swipe zijn niet begrensd.
 
 ### 7.5 Foutmeldingen (nooit ruwe fouten tonen)
 
@@ -192,12 +221,13 @@ Er is **open registratie**, maar een account is pas bruikbaar **nadat het e-mail
 
 - **Aanmelden:** `RegisterView.vue` stuurt `supabase.auth.signUp({ email, password, options: { emailRedirectTo } })`. De gebruiker kiest zelf een e-mailadres en wachtwoord (minimaal **6 tekens**); er is geen token of uitnodiging meer.
 - **Bevestigingsmail:** Supabase verstuurt de "Confirm signup"-mail met `{{ .ConfirmationURL }}`. Na signup is er **geen sessie**: de app toont `VerifyEmailView.vue` met `Er is een email verzonden naar <email>. Klik op de link in de mail om uw account te accepteren.` en een link om een **nieuwe** verificatielink op te vragen (`resendVerification`).
-- **Afdwinging gebeurt in de database**, niet in de app: de Supabase-instelling **"Confirm email" staat AAN** (inloggen zonder bevestiging wordt server-side geweigerd) én de RLS-policies van `lists`/`list_items` eisen `public.is_email_confirmed()` (in `supabase-verification.sql`). Een sessie zonder bevestiging kan dus niets lezen of schrijven.
+- **Afdwinging gebeurt in de database**, niet in de app: de Supabase-instelling **"Confirm email" staat AAN** (inloggen zonder bevestiging wordt server-side geweigerd) én de RLS-policies van `lists`/`list_items` eisen `public.is_email_confirmed()` (in `supabase/verification.sql`). Een sessie zonder bevestiging kan dus niets lezen of schrijven.
 - **Bevestigingslink:** `emailRedirectTo` is native `com.lijstjes.app://` en op het web de volledige pagina-URL (`origin` **plus** `pathname`), zodat het ook onder een subpad zoals de GitHub Pages-projectpagina `/Lijsten/` klopt (zie §10.3). De link logt de gebruiker **automatisch in**; de app toont daarna een kleine **groene bevestiging**.
 - **Verificatietokens** (in de URL-hash) worden niet gelogd, niet in `localStorage` bewaard en niet in de UI of in foutmeldingen getoond; ze worden meteen uit de URL gehaald (`history.replaceState`).
-- **Het uitnodigingssysteem is volledig verwijderd:** geen `invites`/`invite_claims`, geen `claim_invite`, geen `enforce_invite_on_signup`-trigger en geen `com.lijstjes.app://invite` deep link. De oude `supabase-invites.sql` is vervangen door `supabase-verification.sql`.
+- **Het uitnodigingssysteem is volledig verwijderd:** geen `invites`/`invite_claims`, geen `claim_invite`, geen `enforce_invite_on_signup`-trigger en geen `com.lijstjes.app://invite` deep link. De oude `supabase-invites.sql` is vervangen door `supabase/verification.sql`.
 - **Geen eigen SMTP-provider.** Bewust besluit: de bevestigings- en herstelmail gaan via de standaardaflevering van Supabase, met een harde limiet van enkele mails per uur en een kans op spam. De mail kan dus uitblijven. De UI meldt dit zonder technische termen als "rate limit" of "SMTP"; de resend-knop heeft een **cooldown van 60 seconden**.
-- **Supabase-instellingen** (nodig voor het functioneren): Email-provider aan, "Allow new users to sign up" **aan**, "Confirm email" **aan**. Site URL en Redirect URLs staan op **`com.lijstjes.app://`** — het app-schema, **geen** webadres: de app draait als Android-app zonder webhost. Voor webtesten staat `http://localhost:5173` er ook bij. De volledige checklist staat in `supabase-verification.sql`.
+- **Registratie staat bewust UIT** (besluit gebruiker, 2026-11-02): "Allow new users to sign up" is uitgeschakeld, zodat er voorlopig geen nieuwe accounts bij komen. De registratiecode blijft staan; een poging geeft `Nieuwe accounts aanmaken is op dit moment niet mogelijk.` (`SIGNUP_DISABLED`). Zet de instelling **niet** zelf aan; dat is een keuze van de gebruiker.
+- **Supabase-instellingen** (nodig voor het functioneren): Email-provider aan, "Allow new users to sign up" **uit** (zie hierboven; aan zodra registratie weer open moet), "Confirm email" **aan**. Site URL en Redirect URLs staan op **`com.lijstjes.app://`** — het app-schema, **geen** webadres: de app draait als Android-app zonder webhost. Voor webtesten staat `http://localhost:5173` er ook bij. De volledige checklist staat in `supabase/verification.sql`.
 
 ## 8. Functiespecificaties
 
@@ -233,7 +263,7 @@ Bij klikken op "verwijder lijst" (per kaart) opent een **bevestigingsmodal/dialo
 ### 8.4 Taken: `[ ]` / `[x]` prefix
 
 - Taken krijgen `[ ]` voor de titel om ze tijdens het project af te kunnen kruisen `[x]`.
-- Dit geldt **uitsluitend** voor `tasks.md` en de planbestanden. Het is **geen** app-feature: de prefix wordt **niet** in de database of item-tekst opgeslagen.
+- Dit geldt **uitsluitend** voor `docs/tasks.md` en de planbestanden. Het is **geen** app-feature: de prefix wordt **niet** in de database of item-tekst opgeslagen.
 - Een taak wordt **pas** op `[x]` gezet **ná succesvolle voltooiing** (aantoonbaar getest, build/typecheck ok, en functionaliteit werkt). Niet eerder.
 
 ### 8.5 Item afvinken
@@ -322,6 +352,31 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Service worker-versie:** verhoog `CACHE_VERSION` in `public/sw.js` wanneer de app-shell wijzigt, zodat oude caches worden opgeruimd.
 - **Iconen:** de PNG's zijn gerasterd uit `public/icons/icon.svg` en `icon-maskable.svg` (ImageMagick). Wijzig de SVG en raster opnieuw; bewerk de PNG's niet met de hand.
 - **Testen:** Firefox is bruikbaar om de webapp te testen, maar installeert geen PWA. Gebruik Chrome (desktop/Android) of Safari (iOS). `npm run preview:host` toont de build op je telefoon via het LAN (http → alleen lay-out; voor de echte installatie is HTTPS nodig).
+
+### 8.13 Navigatie: laatst bezochte pagina en terugknop
+
+- De app onthoudt per gebruiker de **laatst bezochte pagina**: het overzicht of een open lijst (`lijstjes:view:<userId>`, gezet door `setActiveList`). Bij opstarten, terugkeren naar de app/het tabblad en na synchroniseren blijft de gebruiker op die pagina.
+- Bestaat de onthouden lijst niet meer (lokaal verwijderd, of op een ander apparaat en binnengehaald door een pull), dan valt de app terug op het **overzicht**.
+- **Reageer in `App.vue` op het `user.id`, nooit op het `user`-object.** supabase-js vuurt bij elke terugkeer `SIGNED_IN`/`TOKEN_REFRESHED` met een nieuw object voor dezelfde gebruiker. Opnieuw hydrateren daarop toont het laadscherm en zette de app vroeger terug op het overzicht. Alleen een **andere** gebruiker (of uitloggen) reset en hydrateert.
+- **Android-terugknop sluit de app nooit.** `App.vue` koppelt native `App.addListener("backButton", …)` via `useBackNavigation` (opruimen in `onBeforeUnmount`). Volgorde: (1) open dialoog sluiten (nieuw lijstje, verwijderbevestiging), (2) accountmenu sluiten of item-bewerken annuleren, (3) detailweergave → overzicht, (4) registratie-/verificatie-/herstelscherm → inloggen, (5) overzicht of inlogscherm → `App.minimizeApp()` (naar het Android-startscherm; de app blijft draaien).
+- Schermen en dialogen registreren een handler met `registerBackHandler(fn)` in hun eigen `onMounted` en melden zich af in `onBeforeUnmount` (§5). Een handler geeft `true` terug als hij de terugknop heeft afgehandeld; de nieuwste handler gaat voor. De auth-schermen lopen via de fallback in `App.vue` (zelfde volgorde als de view-keuze).
+- In de browser bestaat de terugknop niet; daar sluit **ESC** dialogen en het menu.
+
+### 8.14 Swipe omlaag synchroniseert (pull-to-refresh)
+
+- Staat de pagina **helemaal bovenaan** (`window.scrollY === 0`), dan start een swipe omlaag een pull. Een ronde indicator in het oranje palet schuift mee met de vinger (met weerstand, half zo snel). Voorbij de drempel (64 px) wordt de spinner vol; **loslaten** start `syncWithServer()` (§7.4). De indicator draait tot de sync klaar is; de pill toont tegelijk zijn spinner en daarna groen of rood. Onder de drempel loslaten → terugveren zonder sync.
+- Werkt in het overzicht én de detailweergave: één `PullToRefresh.vue` in `App.vue`, alleen voor een ingelogde gebruiker. De logica staat in `usePullToRefresh` (pure toestandsmachine, testbaar).
+- **Touch-events, geen pointer-events:** bij pointer-events neemt de browser het gebaar over om te scrollen (`pointercancel`). `touchmove` is niet-passief zodat de pull `preventDefault` kan doen. Alleen touch: met een muis gebeurt niets (test in Chrome DevTools met touch-emulatie).
+- Nooit starten vanaf een invoerveld, sleephandvat of dialoog, en niet tijdens een lopende sync. Omhoog bewegen is gewoon scrollen.
+- `overscroll-behavior-y: contain` op `html`/`body`, zodat Chrome/de PWA niet zelf de pagina herlaadt.
+
+### 8.15 Slepen met een zwevende kopie
+
+- Lijsten (overzicht) en items (detail) worden herschikt door het **sleephandvat** vast te pakken. Daarna volgt een **zwevende kopie** van de hele kaart of het hele item de vinger/muis (`position: fixed`, lichte kanteling en schaduw). Het origineel blijft als half-transparante placeholder staan (`.dragging`); een oranje lijn toont waar hij landt: naar beneden slepen → onder het doel (`.drop-after`), naar boven → erboven.
+- **Pointer-events, geen HTML5 drag & drop.** HTML5-DnD toont als sleepbeeld alleen het handvat en werkt op Android (touch) onbetrouwbaar. De logica staat in `useDragReorder` (sleep pas na 4 px beweging, doel via `elementFromPoint` + `data-drag-id`, automatisch scrollen bij de schermrand, ESC en `pointercancel` breken af). Bij loslaten `moveId` → `reorderLists`/`reorderItems`; de outbox is ongewijzigd (`list.reorder`/`item.reorder`).
+- De kopie is dezelfde component (`ListCard.vue` / `ItemRow.vue` met `ghost`), via `Teleport` in `<body>`, met `aria-hidden`, `inert` en `pointer-events: none` en **zonder** `data-drag-id`, zodat hij nooit als doel telt. Geen gekloonde DOM-nodes (§5).
+- `touch-action: none` staat **alleen op het handvat**: elders blijven scrollen en de swipe omlaag (§8.14) gewoon werken.
+- Na een echte sleep wordt de eerstvolgende klik ingeslikt (`SUPPRESS_CLICK_MS`), anders opent loslaten boven dezelfde kaart de lijst.
 
 ## 9. Stijl, conventies & kwaliteit
 
@@ -447,7 +502,7 @@ Een taak is pas afgerond als:
 - [ ] Cross-user isolatie getest (inloggen als user A, uitloggen, inloggen als user B → geen data van A zichtbaar)
 - [ ] Sync-behavior correct (outbox FIFO, retry/backoff, indicator toont juiste status)
 - [ ] Bij auth-/registratiewijzigingen: negatieve test gedaan (onbevestigd e-mailadres kan niet inloggen; resend met cooldown)
-- [ ] Taakregel in `tasks.md` of het planbestand is **[x]** gezet (na succesvolle afronding)
+- [ ] Taakregel in `docs/tasks.md` of het planbestand is **[x]** gezet (na succesvolle afronding)
 - [ ] Code consistent met bestaande stijl en architectuur
 
 ## 13. Regels "Niet doen"

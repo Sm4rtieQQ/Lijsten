@@ -9,6 +9,7 @@ import {
   isEmailNotConfirmed,
   NETWORK_ERROR,
   SYNC_GENERIC_ERROR,
+  SIGNUP_DISABLED,
   toAuthErrorMessage,
   toUserFacingError,
 } from "./errorMessages";
@@ -81,6 +82,18 @@ describe("toUserFacingError (sync-laag, AGENTS.md §7.5)", () => {
 });
 
 describe("toAuthErrorMessage (auth-laag, AGENTS.md §7.6)", () => {
+  it("vertaalt een uitgeschakelde registratie naar een duidelijke NL-tekst", () => {
+    expect(
+      toAuthErrorMessage({
+        message: "Signups not allowed for this instance",
+        code: "signup_disabled",
+      }),
+    ).toBe(SIGNUP_DISABLED);
+    expect(toAuthErrorMessage("Signups not allowed for this instance")).toBe(
+      SIGNUP_DISABLED,
+    );
+  });
+
   it("vertaalt 'email not confirmed' naar de verificatietekst", () => {
     expect(toAuthErrorMessage("Email not confirmed")).toBe(EMAIL_NOT_CONFIRMED);
     expect(

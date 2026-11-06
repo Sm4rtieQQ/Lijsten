@@ -4,14 +4,23 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import HomeView from "./components/HomeView.vue";
 import ListDetailView from "./components/ListDetailView.vue";
 import LoginView from "./components/LoginView.vue";
+import PullToRefresh from "./components/PullToRefresh.vue";
 import RegisterView from "./components/RegisterView.vue";
 import ResetPasswordView from "./components/ResetPasswordView.vue";
 import SplashView from "./components/SplashView.vue";
 import VerifyEmailView from "./components/VerifyEmailView.vue";
-import { useAuth } from "./composables/useAuth";
+import { useAuth, wasLastSignOutUserInitiated } from "./composables/useAuth";
+import {
+  disposeBackButton,
+  initBackButton,
+} from "./composables/useBackNavigation";
 import { initDeepLink, useDeepLink } from "./composables/useDeepLink";
 import { useLists } from "./composables/useLists";
-import { bindSyncUser } from "./composables/useSync";
+import {
+  bindSyncUser,
+  flushNow,
+  syncWithServerIfStale,
+} from "./composables/useSync";
 
 const {
   user,
@@ -22,7 +31,7 @@ const {
   init,
   setJustVerified,
 } = useAuth();
-const { activeListId, hydrate, reset, refreshData } = useLists();
+const { activeListId, hydrate, reset } = useLists();
 
 // Registratie is een eigen scherm naast het inlogscherm (AGENTS.md §8.9).
 const registerOpen = ref(false);
@@ -123,43 +132,82 @@ watch(
 // Bij wisselen van gebruiker: volledig opnieuw hydrateren (of legen).
 // Ook bij een directe wissel A → B (zonder logout-event) wordt de vorige
 // sessie eerst volledig gewist (per-user keys + in-memory state).
+//
+// Bewust op het **id** en niet op het `user`-object (§8.13): supabase-js vuurt
+// bij elke terugkeer naar de app `SIGNED_IN`/`TOKEN_REFRESHED` met een nieuw
+// object voor dezelfde gebruiker. Daarop opnieuw hydrateren toonde het
+// laadscherm en zette de app terug op het overzicht.
 watch(
-  user,
-  (next, prev) => {
-    if (!next) {
+  () => user.value?.id ?? null,
+  (nextId, prevId) => {
+    if (!nextId) {
       stopHydrating();
-      reset();
+      // Alleen een uitlog-actie van de gebruiker wist de gegevens. Eindigt de
+      // sessie buiten hem om, dan blijven cache en outbox staan zodat niets van
+      // de nog niet verstuurde wijzigingen verloren gaat (§7.3).
+      reset({ keepStoredData: !wasLastSignOutUserInitiated() });
       bindSyncUser(null);
       sessionKey.value += 1;
       return;
     }
-    if (prev && prev.id !== next.id) {
+    if (prevId) {
       reset();
       bindSyncUser(null);
     }
-    beginHydrate(next.id);
-    bindSyncUser(next.id);
+    // Eerst de sync binden: hydrate synchroniseert via useSync (§7.4).
+    bindSyncUser(nextId);
+    beginHydrate(nextId);
     sessionKey.value += 1;
   },
   { immediate: true },
 );
 
-// Sinds de "Verversen"-knop is vervangen door de sync-pill: wanneer de gebruiker
-// terugkomt op het tabblad wordt de cloud alsnog ingehaald (debounced).
+// Wisselen van app/tabblad (§7.3/§7.4):
+// - naar de achtergrond: wachtende wijzigingen meteen versturen (best effort;
+//   de outbox staat lokaal en gaat anders bij de volgende start mee);
+// - terug: de cloud inhalen (debounced), hooguit één keer per 30 s.
 let pullTimer: ReturnType<typeof setTimeout> | null = null;
 
 function onVisibilityChange(): void {
-  if (!user.value || document.visibilityState !== "visible") return;
+  if (!user.value) return;
+  if (document.visibilityState === "hidden") {
+    void flushNow();
+    return;
+  }
   if (pullTimer) clearTimeout(pullTimer);
   pullTimer = setTimeout(() => {
     pullTimer = null;
-    void refreshData();
+    void syncWithServerIfStale();
   }, 800);
+}
+
+/**
+ * Terugknop die geen scherm of dialoog afhandelde (§8.13): de auth-schermen
+ * gaan terug naar inloggen, in dezelfde volgorde als de view-keuze hieronder.
+ * `false` = niets te doen; dan gaat de app naar het Android-startscherm.
+ */
+function onUnhandledBack(): boolean {
+  if (showSplash.value) return false;
+  if (recovery.value) {
+    recovery.value = false;
+    return true;
+  }
+  if (user.value) return false;
+  if (verificationEmail.value) {
+    verificationEmail.value = null;
+    return true;
+  }
+  if (registerOpen.value) {
+    registerOpen.value = false;
+    return true;
+  }
+  return false;
 }
 
 onMounted(() => {
   // Eén plek die de auth initialiseert (A2.2): de composable blijft testbaar.
   void init();
+  void initBackButton(onUnhandledBack);
   // Deep link + webvariant van bevestiging en herstel (AGENTS.md §8.11).
   // `useDeepLink()` registreert de opruiming van de `appUrlOpen`-listener.
   useDeepLink();
@@ -168,6 +216,7 @@ onMounted(() => {
   startMinSplashTimer();
 });
 onBeforeUnmount(() => {
+  disposeBackButton();
   document.removeEventListener("visibilitychange", onVisibilityChange);
   if (pullTimer) clearTimeout(pullTimer);
   if (verifiedTimer) {
@@ -202,6 +251,8 @@ onBeforeUnmount(() => {
            zichtbaar is (idem legacy: .view { display:none } / .view.active). -->
       <HomeView :class="{ active: !activeListId }" />
       <ListDetailView :class="{ active: !!activeListId }" />
+      <!-- Swipe omlaag synchroniseert, op beide schermen (§8.14). -->
+      <PullToRefresh />
     </template>
     <VerifyEmailView
       v-else-if="verificationEmail"

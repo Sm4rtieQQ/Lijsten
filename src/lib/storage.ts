@@ -7,8 +7,9 @@ import { isOutboxEntryArray, type OutboxEntry } from "../types/sync";
  *
  * De backend is injecteerbaar zodat de logica in Node/tests verifieerbaar is.
  * Keys zijn ALTIJD per `userId` gescopeed (`lijstjes:data:<userId>`, enz.) —
- * een globale key bestaat bewust niet (fix voor het cross-user datalek, zie
- * AGENTS.md §11).
+ * een globale key met gebruikersdata bestaat bewust niet (fix voor het cross-user datalek, zie
+ * AGENTS.md §11). Enige uitzondering buiten deze module: de auth-diagnoselog
+ * (`lib/authLog.ts`), die geen gebruikersgegevens bevat.
  */
 
 export interface StorageBackend {
@@ -31,6 +32,7 @@ export const browserStorage: StorageBackend = {
 const dataKey = (userId: string): string => `lijstjes:data:${userId}`;
 const queueKey = (userId: string): string => `lijstjes:queue:${userId}`;
 const syncMetaKey = (userId: string): string => `lijstjes:sync:${userId}`;
+const viewKey = (userId: string): string => `lijstjes:view:${userId}`;
 
 export interface SyncMeta {
   /** ISO-tijdstip van de laatste succesvolle sync, of null als nog nooit. */
@@ -109,7 +111,28 @@ export function saveSyncMeta(
   backend.setItem(syncMetaKey(userId), JSON.stringify(meta));
 }
 
-/** Wist alle per-user keys (data + outbox + sync-meta). Wordt aangeroepen bij uitloggen. */
+/**
+ * Laatst bezochte pagina: het id van de open lijst, of `null` voor het
+ * overzicht (AGENTS.md §8.13). Per gebruiker, net als de cache.
+ */
+export function loadActiveView(
+  userId: string,
+  backend: StorageBackend = browserStorage,
+): string | null {
+  const parsed = parseJson<unknown>(backend.getItem(viewKey(userId)));
+  return typeof parsed === "string" ? parsed : null;
+}
+
+export function saveActiveView(
+  userId: string,
+  listId: string | null,
+  backend: StorageBackend = browserStorage,
+): void {
+  if (listId === null) backend.removeItem(viewKey(userId));
+  else backend.setItem(viewKey(userId), JSON.stringify(listId));
+}
+
+/** Wist alle per-user keys (data + outbox + sync-meta + pagina). Wordt aangeroepen bij uitloggen. */
 export function clearUserData(
   userId: string,
   backend: StorageBackend = browserStorage,
@@ -117,6 +140,7 @@ export function clearUserData(
   backend.removeItem(dataKey(userId));
   backend.removeItem(queueKey(userId));
   backend.removeItem(syncMetaKey(userId));
+  backend.removeItem(viewKey(userId));
 }
 
-export { dataKey, queueKey, syncMetaKey };
+export { dataKey, queueKey, syncMetaKey, viewKey };

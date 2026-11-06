@@ -1,12 +1,16 @@
 import { ref, type Ref } from "vue";
-import type { User } from "@supabase/supabase-js";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 
+import { appendAuthLog, readAuthLog } from "../lib/authLog";
+import type { Database } from "../lib/database.types";
 import {
   EMAIL_NOT_CONFIRMED,
   isEmailNotConfirmed,
   toAuthErrorMessage,
 } from "../lib/errorMessages";
+import { emailRedirectTo } from "../lib/platform";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { EMAIL_REQUIRED, passwordLengthError } from "../lib/validation";
 
 /**
  * Auth-laag (singleton-state: meerdere componenten delen deze refs).
@@ -38,11 +42,32 @@ const verificationEmail: Ref<string | null> = ref(null);
  */
 const justVerified: Ref<boolean> = ref(false);
 
-/** Het app-scheme; hetzelfde als `custom_url_scheme` in `strings.xml`. */
-const APP_SCHEME = "com.lijstjes.app";
+const NOT_CONFIGURED = "Supabase is nog niet geconfigureerd.";
 
-/** Minimumlengte van het wachtwoord; hetzelfde beleid als Supabase hanteert. */
-const MIN_PASSWORD_LENGTH = 6;
+/**
+ * Melding na een herstelverzoek. Geen SMTP (bewust besluit, AGENTS.md §8.11):
+ * de aflevering is beperkt, dus we beloven niet dat de mail altijd aankomt.
+ */
+const RESET_REQUESTED =
+  "Als dit e-mailadres bekend is, ontvang je een herstelmail. Die kan door de afleverbeperking van Supabase uitblijven of in de spam belanden.";
+
+/**
+ * Of het uitloggen door de gebruiker zelf kwam (`signOut()` hieronder, na de
+ * flush-of-bevestig-stap in HomeView). Een sessie die op een andere manier
+ * eindigt (refresh-token geweigerd, sessielimiet, opslag gewist, uitgelogd in een
+ * ander tabblad) is onvrijwillig: dan mag App.vue de outbox niet wissen.
+ * `signOutRequested` staat alleen aan zolang `signOut()` loopt;
+ * `lastSignOutUserInitiated` onthoudt het oordeel over de laatst beëindigde
+ * sessie, zodat het ook klopt als de watcher in App.vue pas later draait.
+ * Standaard `false`: bij twijfel blijven de gegevens staan.
+ */
+let signOutRequested = false;
+let lastSignOutUserInitiated = false;
+
+/** `true` als de laatst beëindigde sessie door de gebruiker zelf is afgesloten. */
+export function wasLastSignOutUserInitiated(): boolean {
+  return lastSignOutUserInitiated;
+}
 
 /**
  * Zet de herstel-status. Exposed op module-niveau zodat `useDeepLink` de
@@ -62,40 +87,57 @@ export function setVerificationEmail(value: string | null): void {
   verificationEmail.value = value;
 }
 
-/** Ligt de app binnen Capacitor (dus niet in een gewone browser)? */
-function isNativePlatform(): boolean {
-  const cap = (
-    globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }
-  ).Capacitor;
-  return cap?.isNativePlatform?.() === true;
+interface AuthActionOptions {
+  /** Validatie vóór de server-call; een string is de foutmelding. */
+  validate?: () => string | null;
+  /** Eigen mapping van een door Supabase teruggegeven fout. */
+  onError?: (err: unknown) => string;
+  onSuccess?: () => void;
 }
 
 /**
- * Doel van de web-redirect: origin **plus** pad van de huidige pagina.
- *
- * Alleen de origin is te weinig wanneer de app onder een subpad draait — zoals de
- * GitHub Pages-projectpagina `/Lijsten/` — want dan wijst de mail naar de root
- * (404). Leeg in omgevingen zonder `location` (bv. Node).
+ * Gemeenschappelijk verloop van elke auth-actie: fout wissen → configuratie-
+ * check → validatie → server-call → fout altijd naar NL-tekst mappen (§7.5).
+ * Reject nooit; het resultaat is `true` bij succes.
  */
-export function webRedirectTarget(
-  location: { origin?: string; pathname?: string } | undefined,
-): string | null {
-  if (!location?.origin) return null;
-  return `${location.origin}${location.pathname ?? ""}`;
+async function runAuthAction(
+  action: (client: SupabaseClient<Database>) => Promise<{ error: unknown }>,
+  options: AuthActionOptions = {},
+): Promise<boolean> {
+  error.value = null;
+  if (!supabase) {
+    error.value = NOT_CONFIGURED;
+    return false;
+  }
+  const invalid = options.validate?.() ?? null;
+  if (invalid) {
+    error.value = invalid;
+    return false;
+  }
+
+  try {
+    const { error: err } = await action(supabase);
+    if (err) {
+      error.value = (options.onError ?? toAuthErrorMessage)(err);
+      return false;
+    }
+  } catch (thrown) {
+    error.value = toAuthErrorMessage(thrown);
+    return false;
+  }
+
+  options.onSuccess?.();
+  return true;
 }
 
 /**
- * Waar Supabase de bevestigings- en herstelmail naartoe stuurt.
- *
- * Native: het eigen scheme `com.lijstjes.app://` (deep link, AGENTS.md §8.11).
- * Web: de volledige pagina-URL, zodat registreren en bevestigen zowel in
- * `npm run dev` als op de GitHub Pages-projectpagina blijft werken (AGENTS.md §10.3).
+ * Debug-accessor: `lijstjesAuthLog()` in de browserconsole (of via remote
+ * debugging van de Android-WebView) geeft de laatste auth-events terug.
  */
-function emailRedirectTo(): string {
-  if (isNativePlatform()) return `${APP_SCHEME}://`;
-  const target =
-    typeof window !== "undefined" ? webRedirectTarget(window.location) : null;
-  return target ?? `${APP_SCHEME}://`;
+function exposeAuthLog(): void {
+  if (typeof window === "undefined") return;
+  (window as unknown as { lijstjesAuthLog?: () => unknown }).lijstjesAuthLog =
+    readAuthLog;
 }
 
 export function useAuth() {
@@ -109,12 +151,28 @@ export function useAuth() {
   async function init() {
     if (initStarted) return;
     initStarted = true;
+    exposeAuthLog();
     if (!supabase) {
       initialized.value = true;
       return;
     }
     try {
-      supabase.auth.onAuthStateChange((_event, session) => {
+      supabase.auth.onAuthStateChange((event, session) => {
+        // Diagnose voor onverwacht uitloggen: alleen eventnaam, tijdstip en
+        // of de gebruiker het zelf deed (geen tokens/e-mail, zie lib/authLog).
+        appendAuthLog(event, signOutRequested);
+        if (!session) lastSignOutUserInitiated = signOutRequested;
+        if (
+          import.meta.env?.DEV &&
+          event === "SIGNED_OUT" &&
+          !signOutRequested
+        ) {
+          // Dev-only diagnose (AGENTS.md §7.5/§9): onvrijwillig uitloggen.
+          console.warn(
+            "[auth] onvrijwillig SIGNED_OUT",
+            readAuthLog().slice(-5),
+          );
+        }
         user.value = session?.user ?? null;
       });
       const {
@@ -126,38 +184,21 @@ export function useAuth() {
     }
   }
 
-  async function signIn(email: string, password: string): Promise<boolean> {
-    error.value = null;
-    if (!supabase) {
-      error.value = "Supabase is nog niet geconfigureerd.";
-      return false;
-    }
-
-    try {
-      const { error: err } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (err) {
-        if (isEmailNotConfirmed(err)) {
+  function signIn(email: string, password: string): Promise<boolean> {
+    return runAuthAction(
+      (client) => client.auth.signInWithPassword({ email, password }),
+      {
+        onError: (err) => {
+          if (!isEmailNotConfirmed(err)) return toAuthErrorMessage(err);
           // Stuur de gebruiker naar de verificatiepagina.
           verificationEmail.value = email.trim();
-          error.value = EMAIL_NOT_CONFIRMED;
-        } else {
-          // "Invalid login credentials" mapt naar dezelfde NL-tekst als
-          // voorheen; netwerk-/rate-limitfouten krijgen hun eigen vriendelijke
-          // melding (§7.5).
-          error.value = toAuthErrorMessage(err);
-        }
-        return false;
-      }
-    } catch (thrown) {
-      error.value = toAuthErrorMessage(thrown);
-      return false;
-    }
-
-    verificationEmail.value = null;
-    return true;
+          return EMAIL_NOT_CONFIRMED;
+        },
+        onSuccess: () => {
+          verificationEmail.value = null;
+        },
+      },
+    );
   }
 
   /**
@@ -167,136 +208,76 @@ export function useAuth() {
    * eerst op de link in de bevestigingsmail klikken. Bij succes zetten we
    * `verificationEmail`, zodat `App.vue` de verificatiepagina toont.
    */
-  async function register(email: string, password: string): Promise<boolean> {
-    error.value = null;
-    if (!supabase) {
-      error.value = "Supabase is nog niet geconfigureerd.";
-      return false;
-    }
-
+  function register(email: string, password: string): Promise<boolean> {
     const trimmed = email.trim();
-    if (!trimmed) {
-      error.value = "Vul je e-mailadres in.";
-      return false;
-    }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      error.value = `Het wachtwoord moet minimaal ${MIN_PASSWORD_LENGTH} tekens hebben.`;
-      return false;
-    }
-
-    try {
-      const { error: err } = await supabase.auth.signUp({
-        email: trimmed,
-        password,
-        options: { emailRedirectTo: emailRedirectTo() },
-      });
-      if (err) {
-        error.value = toAuthErrorMessage(err);
-        return false;
-      }
-    } catch (thrown) {
-      error.value = toAuthErrorMessage(thrown);
-      return false;
-    }
-
-    verificationEmail.value = trimmed;
-    return true;
+    return runAuthAction(
+      (client) =>
+        client.auth.signUp({
+          email: trimmed,
+          password,
+          options: { emailRedirectTo: emailRedirectTo() },
+        }),
+      {
+        validate: () =>
+          trimmed ? passwordLengthError(password) : EMAIL_REQUIRED,
+        onSuccess: () => {
+          verificationEmail.value = trimmed;
+        },
+      },
+    );
   }
 
   /** Vraag een nieuwe verificatielink aan (Supabase-drempel: enkele per uur). */
-  async function resendVerification(email: string): Promise<boolean> {
-    error.value = null;
-    if (!supabase) {
-      error.value = "Supabase is nog niet geconfigureerd.";
-      return false;
-    }
-
+  function resendVerification(email: string): Promise<boolean> {
     const trimmed = email.trim();
-    if (!trimmed) {
-      error.value = "Vul je e-mailadres in.";
-      return false;
-    }
-
-    try {
-      const { error: err } = await supabase.auth.resend({
-        type: "signup",
-        email: trimmed,
-        options: { emailRedirectTo: emailRedirectTo() },
-      });
-      if (err) {
-        error.value = toAuthErrorMessage(err);
-        return false;
-      }
-    } catch (thrown) {
-      error.value = toAuthErrorMessage(thrown);
-      return false;
-    }
-    return true;
+    return runAuthAction(
+      (client) =>
+        client.auth.resend({
+          type: "signup",
+          email: trimmed,
+          options: { emailRedirectTo: emailRedirectTo() },
+        }),
+      { validate: () => (trimmed ? null : EMAIL_REQUIRED) },
+    );
   }
 
-  async function resetPassword(email: string): Promise<boolean> {
-    error.value = null;
-    if (!supabase) {
-      error.value = "Supabase is nog niet geconfigureerd.";
-      return false;
-    }
-
-    try {
-      const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-        // Eigen scheme, geen webadres: de app draait zonder webhost.
-        redirectTo: emailRedirectTo(),
-      });
-      if (err) {
-        error.value = toAuthErrorMessage(err);
-        return false;
-      }
-    } catch (thrown) {
-      error.value = toAuthErrorMessage(thrown);
-      return false;
-    }
-
-    // Geen SMTP (bewust besluit, AGENTS.md §8.11): de aflevering is beperkt.
-    // We beloven daarom niet dat de mail altijd aankomt.
-    error.value =
-      "Als dit e-mailadres bekend is, ontvang je een herstelmail. Die kan door de afleverbeperking van Supabase uitblijven of in de spam belanden.";
-    return true;
+  function resetPassword(email: string): Promise<boolean> {
+    return runAuthAction(
+      (client) =>
+        client.auth.resetPasswordForEmail(email, {
+          redirectTo: emailRedirectTo(),
+        }),
+      {
+        onSuccess: () => {
+          error.value = RESET_REQUESTED;
+        },
+      },
+    );
   }
 
   /**
    * Zet een nieuw wachtwoord na een herstel-link. De sessie is op dat moment
    * al een recovery-sessie, dus dit is een gewone `updateUser`-call.
    */
-  async function updatePassword(newPassword: string): Promise<boolean> {
-    error.value = null;
-    if (!supabase) {
-      error.value = "Supabase is nog niet geconfigureerd.";
-      return false;
-    }
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      error.value = `Het wachtwoord moet minimaal ${MIN_PASSWORD_LENGTH} tekens hebben.`;
-      return false;
-    }
-
-    try {
-      const { error: err } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (err) {
-        error.value = toAuthErrorMessage(err);
-        return false;
-      }
-    } catch (thrown) {
-      error.value = toAuthErrorMessage(thrown);
-      return false;
-    }
-
-    setRecovery(false);
-    return true;
+  function updatePassword(newPassword: string): Promise<boolean> {
+    return runAuthAction(
+      (client) => client.auth.updateUser({ password: newPassword }),
+      {
+        validate: () => passwordLengthError(newPassword),
+        onSuccess: () => setRecovery(false),
+      },
+    );
   }
 
   async function signOut(): Promise<void> {
     error.value = null;
-    await supabase?.auth.signOut();
+    signOutRequested = true;
+    lastSignOutUserInitiated = true;
+    try {
+      await supabase?.auth.signOut();
+    } finally {
+      signOutRequested = false;
+    }
     user.value = null;
     setRecovery(false);
     setJustVerified(false);

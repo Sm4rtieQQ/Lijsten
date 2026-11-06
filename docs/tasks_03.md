@@ -1,7 +1,7 @@
 # task_03 — Open registratie met e-mailverificatie
 
 > Plan. **Taak 2–6 zijn uitgevoerd**; taak 1 is **klaargezet** (SQL + checklist) en moet
-> nog in het Supabase Dashboard worden uitgevoerd (zie `supabase-verification.sql`).
+> nog in het Supabase Dashboard worden uitgevoerd (zie `supabase/verification.sql`).
 > Elke taak hieronder is één regel `[ ]` en wordt pas op `[x]`
 > gezet nadat deze is geïmplementeerd **en** aantoonbaar getest (zie AGENTS.md §12).
 > Dit bestand is de **opvolger** van `task_02.md`; `task_02.md` blijft onaangetast.
@@ -44,7 +44,7 @@
 > Kan **niet** vanuit de repo: uitvoeren in het Supabase Dashboard en de SQL Editor.
 > Zonder 1.1 blijft élke open registratie server-side falen met `no_active_invite`.
 
-- [x] **1.1** Nieuw SQL-script (bijv. `supabase-verification.sql`, idempotent) dat het
+- [x] **1.1** Nieuw SQL-script (bijv. `supabase/verification.sql`, idempotent) dat het
       uitnodigingsmodel volledig opruimt:
 
       ```sql
@@ -69,12 +69,17 @@
       ```
 
       Daarna `and public.is_email_confirmed()` toevoegen aan álle `lists_*`- en
-      `items_*`-policies in `supabase-schema.sql`. Een ongeverifieerde gebruiker kan
+      `items_*`-policies in `supabase/schema.sql`. Een ongeverifieerde gebruiker kan
       daarmee niets lezen/schrijven, ook al zou er ooit een sessie bestaan.
 
-- [ ] **1.3** Supabase-instelling: **"Confirm email" AANzetten** (Authentication → Providers →
+- [x] **1.3** Supabase-instelling: **"Confirm email" AANzetten** (Authentication → Providers →
       Email). Gevolg: `signUp` geeft geen sessie terug tot de gebruiker klikt; inloggen zonder
       bevestiging wordt server-side geweigerd. `Allow new users to sign up` blijft AAN.
+
+  **Gecontroleerd 2026-11-02** (`GET /auth/v1/settings`): "Confirm email" staat AAN
+  (`mailer_autoconfirm: false`). "Allow new users to sign up" staat **bewust UIT**
+  (`disable_signup: true`, besluit gebruiker 2026-11-02: voorlopig geen nieuwe accounts).
+  Een registratiepoging toont `Nieuwe accounts aanmaken is op dit moment niet mogelijk.`
 
 - [ ] **1.4** URL-configuratie: Site URL en Redirect URLs blijven `com.lijstjes.app://`.
       Voor webtesten (`npm run dev`) ook `http://localhost:5173` aan de Redirect URLs toevoegen.
@@ -86,6 +91,10 @@
 - [ ] **1.6** Verifiëren dat het SQL-script is uitgevoerd: een testgebruiker aanmaken op een
       eigen adres moet lukken (geen `no_active_invite` meer), en `select * from public.invites`
       bestaat niet meer.
+
+  **Gecontroleerd 2026-11-02:** het script is uitgevoerd — `rpc/is_email_confirmed` bestaat
+  (geeft `false` zonder sessie) en `rpc/claim_invite` geeft 404. Een testgebruiker aanmaken
+  kan pas als signup weer AAN staat (zie 1.3).
 
 ---
 
@@ -272,7 +281,7 @@ account te accepteren.`** (met het werkelijke adres uit `verificationEmail`).
       (bestaat niet), geen ruwe Supabase-fouten tonen.
 - [x] **7.5** §4 **Projectstructuur**: `VerifyEmailView.vue` toevoegen; `inviteToken.ts`/
       `supabase-invites.sql` vervangen door de nieuwe namen
-      (`urlParams.ts` / `supabase-verification.sql`), of anders de omschrijving bijwerken.
+      (`urlParams.ts` / `supabase/verification.sql`), of anders de omschrijving bijwerken.
 - [x] **7.6** §7.2 (database types): verwijzing naar `invites`/`claim_invite` verwijderen.
 
 ---

@@ -358,6 +358,30 @@ h2 {
 .sync-indicator[data-status="error"] .sync-dot {
   background: #a3382f;
 }
+/* Klikzone (§7.4/§9): een transparante rand van 13px maakt de pill — ook
+   ingeklapt tot alleen de dot — minstens 44×44 px raakbaar, zonder dat hij
+   groter oogt. De negatieve marge houdt de lay-out gelijk; de achtergrond
+   blijft binnen de padding-box. Maten = oude maat + 2 × 13px. */
+.sync-pill {
+  border: 13px solid transparent;
+  margin: -13px;
+  min-height: 44px;
+  max-width: 326px;
+}
+.sync-row.is-collapsed .sync-pill {
+  min-width: 42px;
+  min-height: 44px;
+  max-width: 44px;
+}
+/* Ná de status- en hover-regels: hun `background`-shorthand zet de clip terug. */
+.sync-indicator .sync-pill,
+.sync-indicator[data-status] .sync-pill,
+.sync-indicator .sync-pill:hover:not(:disabled) {
+  background-clip: padding-box;
+}
+.sync-pill:focus-visible {
+  outline-offset: -13px;
+}
 .sync-spinner {
   width: 11px;
   height: 11px;
@@ -1218,4 +1242,118 @@ body.no-scroll {
   .loading-spinner {
     animation: none;
   }
+}
+
+/* ---------- Fase 8: swipe omlaag synchroniseert (§8.14) ---------- */
+/* Geen eigen pull-to-refresh van Chrome/PWA (die herlaadt de pagina). */
+html,
+body {
+  overscroll-behavior-y: contain;
+}
+.pull-indicator {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%;
+  z-index: 40;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 4px 14px rgba(52, 46, 42, 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+/* Tijdens het trekken volgt hij de vinger direct, zonder vertraging. */
+.pull-indicator.is-pulling {
+  transition: none;
+}
+.pull-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(230, 109, 53, 0.28);
+  border-top-color: var(--orange);
+  border-radius: 50%;
+}
+/* Voorbij de drempel: loslaten start de sync. */
+.pull-indicator.is-ready .pull-spinner {
+  border-right-color: var(--orange);
+}
+.pull-indicator.is-refreshing .pull-spinner {
+  animation: spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-indicator {
+    transition: none;
+  }
+}
+
+/* ---------- Fase 8: slepen met een zwevende kopie (§8.15) ---------- */
+/* Op touch neemt het handvat de vinger over: geen scrollen, geen swipe. */
+.drag-handle,
+.list-drag-handle {
+  touch-action: none;
+}
+/* De oranje lijn staat waar de rij landt: naar beneden slepen → eronder. */
+.list-card.drag-over.drop-after {
+  border-top: 1px solid #ddccbfbf;
+  border-bottom: 2px solid var(--orange);
+}
+.item.drag-over.drop-after {
+  border-top: 1px solid transparent;
+  border-bottom: 2px solid var(--orange);
+}
+/* De kopie volgt de vinger/muis; geen klikdoel, boven alles. */
+.drag-ghost {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+  transform: rotate(1.5deg) scale(1.03);
+  transform-origin: 24px 50%;
+}
+.drag-ghost > .list-card,
+.drag-ghost > .item {
+  margin: 0;
+  border-color: var(--line);
+  background: var(--white);
+  box-shadow: 0 14px 30px rgba(52, 46, 42, 0.18);
+  transition: none;
+}
+.drag-ghost .list-drag-handle,
+.drag-ghost .drag-handle {
+  cursor: grabbing;
+}
+@media (prefers-reduced-motion: reduce) {
+  .drag-ghost {
+    transform: none;
+  }
+}
+
+/* ---------- Fase 9: uitloggen met niet-verstuurde wijzigingen (§7.3) ---------- */
+/* Gewapend volgens §8.6: oranje met witte tekst, zichtbaar zonder hover. */
+.panel-logout.is-armed,
+.panel-logout.is-armed:hover {
+  color: #fff;
+  background: var(--orange);
+  font-weight: 700;
+}
+.panel-logout.is-armed:hover {
+  background: var(--orange-dark);
+}
+.panel-logout:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.panel-note {
+  margin: 4px 8px 0;
+  color: var(--orange-dark);
+  font-size: 10px;
+  line-height: 1.4;
 }

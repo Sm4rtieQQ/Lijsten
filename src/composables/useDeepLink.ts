@@ -6,6 +6,7 @@ import {
   readParams,
   stripUrlHash,
 } from "../lib/urlParams";
+import { isNativePlatform } from "../lib/platform";
 import { supabase } from "../lib/supabase";
 import { setJustVerified, setRecovery } from "./useAuth";
 
@@ -29,14 +30,6 @@ const pendingHandles: Array<{ remove: () => Promise<void> }> = [];
 export function __resetDeepLinkState(): void {
   setRecovery(false);
   setJustVerified(false);
-}
-
-/** Ligt de app binnen Capacitor (dus niet in een gewone browser)? */
-function isNativePlatform(): boolean {
-  const cap = (
-    globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }
-  ).Capacitor;
-  return cap?.isNativePlatform?.() === true;
 }
 
 /**

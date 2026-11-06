@@ -115,4 +115,28 @@ describe("SyncIndicator (AGENTS.md §7.4)", () => {
     await wrapper.get(".sync-pill").trigger("click");
     expect(syncNow).toHaveBeenCalledTimes(1);
   });
+
+  it("ingeklapt (alleen de dot) blijft de pill een klikbare knop", async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = await mountPill("synced");
+      vi.advanceTimersByTime(1500);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(wrapper.get(".sync-row").classes()).toContain("is-collapsed");
+
+      const pill = wrapper.get(".sync-pill");
+      expect((pill.element as HTMLButtonElement).disabled).toBe(false);
+      await pill.trigger("click");
+      expect(syncNow).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is tijdens het synchroniseren niet klikbaar", async () => {
+    const wrapper = await mountPill("syncing");
+    expect(
+      (wrapper.get(".sync-pill").element as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
 });

@@ -35,6 +35,10 @@ export const DUPLICATE_ERROR = "Dit item bestaat al.";
 export const SYNC_GENERIC_ERROR =
   "Synchronisatie mislukt. Probeer het opnieuw.";
 
+/** Registreren staat in Supabase bewust uit (§7.6). */
+export const SIGNUP_DISABLED =
+  "Nieuwe accounts aanmaken is op dit moment niet mogelijk.";
+
 /** Vangnet voor onbekende auth-fouten (past beter dan de sync-tekst). */
 export const AUTH_GENERIC_ERROR = "Er ging iets mis. Probeer het opnieuw.";
 
@@ -112,6 +116,11 @@ const AUTH_RULES: readonly Rule[] = [
     message: "Er bestaat al een account met dit e-mailadres.",
   },
   {
+    // "Allow new users to sign up" staat bewust UIT (§7.6).
+    test: ["signup_disabled", "signups not allowed"],
+    message: SIGNUP_DISABLED,
+  },
+  {
     test: [
       "password should be at least",
       "password is too short",
@@ -153,11 +162,7 @@ export function toUserFacingError(error: unknown): string {
 
   const text = extractMessage(error).toLowerCase();
   if (!text) return SYNC_GENERIC_ERROR;
-
-  for (const rule of SYNC_RULES) {
-    if (rule.test.some((needle) => text.includes(needle))) return rule.message;
-  }
-  return SYNC_GENERIC_ERROR;
+  return matchRules(text, SYNC_RULES) ?? SYNC_GENERIC_ERROR;
 }
 
 /**
@@ -166,15 +171,20 @@ export function toUserFacingError(error: unknown): string {
  */
 export function toAuthErrorMessage(error: unknown): string {
   const text = extractMessage(error).toLowerCase();
-
-  for (const rule of AUTH_RULES) {
-    if (rule.test.some((needle) => text.includes(needle))) return rule.message;
-  }
   // Netwerkfouten herkennen we ook in de auth-laag (bv. bij signUp/signIn).
-  for (const rule of NETWORK_RULES) {
-    if (rule.test.some((needle) => text.includes(needle))) return rule.message;
-  }
-  return AUTH_GENERIC_ERROR;
+  return (
+    matchRules(text, AUTH_RULES) ??
+    matchRules(text, NETWORK_RULES) ??
+    AUTH_GENERIC_ERROR
+  );
+}
+
+/** Eerste regel waarvan een vangwoord in `text` (lowercase) voorkomt. */
+function matchRules(text: string, rules: readonly Rule[]): string | null {
+  const rule = rules.find((r) =>
+    r.test.some((needle) => text.includes(needle)),
+  );
+  return rule?.message ?? null;
 }
 
 /** Is dit de Supabase-fout dat het e-mailadres nog niet bevestigd is? */

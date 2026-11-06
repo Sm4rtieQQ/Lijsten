@@ -7,14 +7,6 @@ export function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export function isIsoDateTime(value: string): boolean {
-  return !Number.isNaN(Date.parse(value));
-}
-
 /**
  * Vergelijkt de ingevoerde titel met de werkelijke lijsttitel.
  *
@@ -24,4 +16,23 @@ export function isIsoDateTime(value: string): boolean {
  */
 export function isExactTitleMatch(input: string, title: string): boolean {
   return input.trim() === title;
+}
+
+/**
+ * Drag & drop: verplaatst `fromId` naar de plek van `toId`. Geeft `null` als er
+ * niets te verplaatsen valt (zelfde id of onbekend id).
+ */
+export function moveId(
+  ids: readonly string[],
+  fromId: string,
+  toId: string,
+): string[] | null {
+  if (fromId === toId) return null;
+  const fromIndex = ids.indexOf(fromId);
+  const toIndex = ids.indexOf(toId);
+  if (fromIndex === -1 || toIndex === -1) return null;
+  const next = [...ids];
+  next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, fromId);
+  return next;
 }

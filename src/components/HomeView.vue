@@ -1,15 +1,33 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 
+import { useArmedConfirm } from "../composables/useArmedConfirm";
 import { useAuth } from "../composables/useAuth";
+import { flushBeforeSignOut } from "../composables/useSync";
+import { registerBackHandler } from "../composables/useBackNavigation";
+import { useDragReorder } from "../composables/useDragReorder";
 import { useLists } from "../composables/useLists";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.vue";
+import ListCard from "./ListCard.vue";
 import SyncIndicator from "./SyncIndicator.vue";
 import type { List } from "../types/app";
 
 const { user, signOut } = useAuth();
-const { lists, setActiveList, createNewList, reorderLists, deleteList } =
-  useLists();
+const {
+  lists,
+  activeListId,
+  setActiveList,
+  createNewList,
+  reorderLists,
+  deleteList,
+} = useLists();
 
 const accountOpen = ref(false);
 const accountRef = ref<HTMLElement | null>(null);
@@ -18,10 +36,6 @@ const newListTitle = ref("");
 const newListDialog = ref<HTMLDialogElement | null>(null);
 const newListInput = ref<HTMLInputElement | null>(null);
 const deleteTarget = ref<List | null>(null);
-
-// Drag & drop (lijsten herschikken)
-const draggingListId = ref<string | null>(null);
-const dragOverListId = ref<string | null>(null);
 
 function onDocumentClick(event: MouseEvent): void {
   if (accountRef.value && !accountRef.value.contains(event.target as Node)) {
@@ -36,13 +50,30 @@ function onDocumentKeydown(event: KeyboardEvent): void {
     accountButtonRef.value?.focus();
   }
 }
+/** Android-terugknop (§8.13): eerst de dialoog, dan het menu. */
+function onBack(): boolean {
+  if (activeListId.value) return false; // het overzicht is niet zichtbaar
+  if (newListDialog.value?.open) {
+    closeNewListDialog();
+    return true;
+  }
+  if (accountOpen.value) {
+    accountOpen.value = false;
+    return true;
+  }
+  return false;
+}
+
+let offBack: (() => void) | null = null;
 onMounted(() => {
   document.addEventListener("click", onDocumentClick);
   document.addEventListener("keydown", onDocumentKeydown);
+  offBack = registerBackHandler(onBack);
 });
 onBeforeUnmount(() => {
   document.removeEventListener("click", onDocumentClick);
   document.removeEventListener("keydown", onDocumentKeydown);
+  offBack?.();
 });
 
 function toggleAccount(): void {
@@ -82,49 +113,68 @@ function onConfirmDelete(): void {
   deleteTarget.value = null;
 }
 
-async function onLogout(): Promise<void> {
+// --- Uitloggen (§7.3): uitloggen wist de outbox, dus eerst alles versturen. ---
+// Blijven er wijzigingen achter (offline of fout), dan wordt de knop gewapend
+// met de twee-staps bevestiging van §8.6; pas de tweede klik logt uit.
+const LOGOUT_KEY = "logout";
+const loggingOut = ref(false);
+const {
+  arm: armLogout,
+  disarm: disarmLogout,
+  isArmed: isLogoutArmed,
+  dispose: disposeLogoutConfirm,
+} = useArmedConfirm(() => void doSignOut());
+onBeforeUnmount(disposeLogoutConfirm);
+
+// Menu dicht → bevestiging vervalt.
+watch(accountOpen, (open) => {
+  if (!open) disarmLogout();
+});
+
+async function doSignOut(): Promise<void> {
   accountOpen.value = false;
   await signOut();
 }
 
-function completedText(list: List): string {
-  if (list.items.length === 0) return "Nog geen items";
-  const done = list.items.filter((item) => item.done).length;
-  return `${done} van ${list.items.length} afgevinkt`;
-}
-
-function onListDragStart(list: List, event: DragEvent): void {
-  draggingListId.value = list.id;
-  event.dataTransfer?.setData("text/plain", list.id);
-}
-
-function onListDragEnd(): void {
-  draggingListId.value = null;
-  dragOverListId.value = null;
-}
-
-function onListDragOver(listId: string): void {
-  if (draggingListId.value && draggingListId.value !== listId) {
-    dragOverListId.value = listId;
+async function onLogout(): Promise<void> {
+  if (loggingOut.value) return;
+  if (isLogoutArmed(LOGOUT_KEY)) {
+    armLogout(LOGOUT_KEY); // tweede klik: toch uitloggen
+    return;
   }
+  loggingOut.value = true;
+  const safe = await flushBeforeSignOut();
+  loggingOut.value = false;
+  if (safe) await doSignOut();
+  else armLogout(LOGOUT_KEY);
 }
 
-function onListDrop(targetId: string): void {
-  const from = draggingListId.value;
-  draggingListId.value = null;
-  dragOverListId.value = null;
-  if (!from || from === targetId) return;
+// --- Slepen (lijsten herschikken, §8.15): pointer-events + zwevende kopie ---
+const {
+  draggingId,
+  overId,
+  side,
+  ghost,
+  onHandlePointerDown,
+  dispose: disposeDrag,
+} = useDragReorder({
+  ids: () => lists.value.map((list) => list.id),
+  onReorder: reorderLists,
+});
+onBeforeUnmount(disposeDrag);
 
-  const ids = lists.value.map((list) => list.id);
-  const fromIndex = ids.indexOf(from);
-  const toIndex = ids.indexOf(targetId);
-  if (fromIndex === -1 || toIndex === -1) return;
-  const next = [...ids];
-  const [moved] = next.splice(fromIndex, 1);
-  if (!moved) return;
-  next.splice(toIndex, 0, moved);
-  reorderLists(next);
-}
+const draggedList = computed(() =>
+  lists.value.find((list) => list.id === draggingId.value),
+);
+const ghostStyle = computed(() =>
+  ghost.value
+    ? {
+        left: `${ghost.value.left}px`,
+        top: `${ghost.value.top}px`,
+        width: `${ghost.value.width}px`,
+      }
+    : {},
+);
 </script>
 
 <template>
@@ -161,12 +211,34 @@ function onListDrop(targetId: string): void {
             </button>
             <p class="eyebrow panel-header">Account</p>
             <span class="current-user-email">{{ user?.email }}</span>
+            <p
+              v-if="isLogoutArmed(LOGOUT_KEY)"
+              class="panel-note"
+              role="status"
+            >
+              Niet alle wijzigingen zijn verstuurd. Ze gaan verloren als je nu
+              uitlogt.
+            </p>
             <button
               class="panel-action panel-logout"
+              :class="{ 'is-armed': isLogoutArmed(LOGOUT_KEY) }"
               type="button"
+              :disabled="loggingOut"
+              :aria-pressed="isLogoutArmed(LOGOUT_KEY) ? 'true' : 'false'"
+              :aria-label="
+                isLogoutArmed(LOGOUT_KEY)
+                  ? 'Bevestigen: toch uitloggen, niet-verstuurde wijzigingen gaan verloren'
+                  : undefined
+              "
               @click="onLogout"
             >
-              Uitloggen
+              {{
+                loggingOut
+                  ? "Versturen…"
+                  : isLogoutArmed(LOGOUT_KEY)
+                    ? "Toch uitloggen"
+                    : "Uitloggen"
+              }}
             </button>
           </div>
         </div>
@@ -174,62 +246,32 @@ function onListDrop(targetId: string): void {
     </header>
 
     <div class="list-grid">
-      <article
+      <ListCard
         v-for="list in lists"
         :key="list.id"
-        class="list-card"
-        :class="{
-          dragging: list.id === draggingListId,
-          'drag-over': list.id === dragOverListId,
-        }"
-        role="button"
-        tabindex="0"
-        :aria-label="`Lijst ${list.title} openen`"
-        @click="openList(list)"
-        @keydown.enter.prevent="openList(list)"
-        @keydown.space.prevent="openList(list)"
-        @dragend="onListDragEnd"
-        @dragover.prevent="onListDragOver(list.id)"
-        @drop.prevent="onListDrop(list.id)"
-      >
-        <div class="card-title-row">
-          <button
-            class="list-drag-handle"
-            type="button"
-            draggable="true"
-            aria-label="Sleep lijst om te verplaatsen"
-            @click.stop
-            @keydown.stop
-            @dragstart.stop="onListDragStart(list, $event)"
-          >
-            <svg viewBox="0 0 16 20" aria-hidden="true">
-              <circle cx="5" cy="4" r="1.4" />
-              <circle cx="11" cy="4" r="1.4" />
-              <circle cx="5" cy="10" r="1.4" />
-              <circle cx="11" cy="10" r="1.4" />
-              <circle cx="5" cy="16" r="1.4" />
-              <circle cx="11" cy="16" r="1.4" />
-            </svg>
-          </button>
-          <span class="card-title">{{ list.title }}</span>
-        </div>
-        <span class="card-footer">
-          <span>{{ completedText(list) }}</span>
-          <span class="card-arrow">&#8594;</span>
-        </span>
-        <button
-          class="card-delete"
-          type="button"
-          :aria-label="`Lijst ${list.title} verwijderen`"
-          @click.stop="requestDelete(list)"
-          @keydown.stop
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13" />
-          </svg>
-        </button>
-      </article>
+        :list="list"
+        :dragging="list.id === draggingId"
+        :drop-side="list.id === overId ? side : null"
+        @open="openList(list)"
+        @delete="requestDelete(list)"
+        @handle-pointerdown="
+          (event, card) => onHandlePointerDown(list.id, event, card)
+        "
+      />
     </div>
+
+    <!-- Zwevende kopie van de gesleepte kaart (§8.15); geen klikdoel. -->
+    <Teleport to="body">
+      <div
+        v-if="ghost && draggedList"
+        class="drag-ghost"
+        :style="ghostStyle"
+        aria-hidden="true"
+        inert
+      >
+        <ListCard :list="draggedList" ghost />
+      </div>
+    </Teleport>
 
     <div v-if="lists.length === 0" class="empty-state">
       <div class="empty-icon">+</div>
