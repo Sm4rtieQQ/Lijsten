@@ -27,6 +27,7 @@ function setScrollY(value: number): void {
 
 describe("PullToRefresh (AGENTS.md §8.14)", () => {
   let wrapper: VueWrapper | undefined;
+  const indicator = () => wrapper!.get('[data-testid="pull-indicator"]');
 
   beforeEach(() => {
     syncNow.mockClear();
@@ -43,7 +44,7 @@ describe("PullToRefresh (AGENTS.md §8.14)", () => {
     const move = touch("touchmove", 300, document.body);
     expect(move.defaultPrevented).toBe(true);
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".pull-indicator").classes()).toContain("is-ready");
+    expect(indicator().attributes("data-state")).toBe("ready");
 
     touch("touchend", null, document.body);
     await flushPromises();
@@ -61,21 +62,79 @@ describe("PullToRefresh (AGENTS.md §8.14)", () => {
     expect(syncNow).not.toHaveBeenCalled();
   });
 
-  it("niet vanaf een invoerveld of sleephandvat", async () => {
+  it("onder de drempel loslaten → terugveren zonder sync; vanaf 64 px is hij klaar", async () => {
     wrapper = mount(PullToRefresh);
-    for (const html of [
-      "<input />",
-      '<button class="drag-handle"><span></span></button>',
-    ]) {
-      document.body.insertAdjacentHTML("beforeend", html);
-      const target =
-        document.body.lastElementChild?.firstElementChild ??
-        document.body.lastElementChild!;
-      touch("touchstart", 10, target);
-      touch("touchmove", 300, target);
-      touch("touchend", null, target);
-    }
+    expect(indicator().attributes("data-state")).toBe("idle");
+
+    // De indicator beweegt half zo snel als de vinger: 126 px → 63 px.
+    touch("touchstart", 0, document.body);
+    touch("touchmove", 126, document.body);
+    await wrapper.vm.$nextTick();
+    expect(indicator().attributes("data-state")).toBe("pulling");
+    // 128 px → precies de drempel (64 px).
+    touch("touchmove", 128, document.body);
+    await wrapper.vm.$nextTick();
+    expect(indicator().attributes("data-state")).toBe("ready");
+    touch("touchmove", 126, document.body);
+    await wrapper.vm.$nextTick();
+    expect(indicator().attributes("data-state")).toBe("pulling");
+
+    touch("touchend", null, document.body);
     await flushPromises();
+    expect(syncNow).not.toHaveBeenCalled();
+    expect(indicator().attributes("data-state")).toBe("idle");
+  });
+
+  it("toont refreshing tot de sync klaar is, en start dan niet opnieuw", async () => {
+    let finish: () => void = () => {};
+    syncNow.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    wrapper = mount(PullToRefresh);
+    touch("touchstart", 0, document.body);
+    touch("touchmove", 300, document.body);
+    touch("touchend", null, document.body);
+    await wrapper.vm.$nextTick();
+    expect(indicator().attributes("data-state")).toBe("refreshing");
+
+    // Tijdens een lopende sync begint er geen nieuwe pull.
+    touch("touchstart", 0, document.body);
+    const move = touch("touchmove", 300, document.body);
+    expect(move.defaultPrevented).toBe(false);
+
+    finish();
+    await flushPromises();
+    expect(indicator().attributes("data-state")).toBe("idle");
+    expect(syncNow).toHaveBeenCalledOnce();
+  });
+
+  // De component herkent deze plekken aan hun CSS-klassen (BLOCKED in
+  // PullToRefresh.vue). Een hernoeming zonder deze selector mee te nemen
+  // laat de pull weer starten vanaf een handvat (§8.14).
+  it.each([
+    ["een invoerveld", "<input />"],
+    ["een tekstvak", "<textarea></textarea>"],
+    ["een keuzelijst", "<select></select>"],
+    ["een dialoog", "<dialog><p>tekst</p></dialog>"],
+    [
+      "het sleephandvat van een item",
+      '<button class="drag-handle"><span></span></button>',
+    ],
+    [
+      "het sleephandvat van een lijst",
+      '<button class="list-drag-handle"><span></span></button>',
+    ],
+  ])("niet vanaf %s", async (_name, html) => {
+    wrapper = mount(PullToRefresh);
+    document.body.insertAdjacentHTML("beforeend", html);
+    const root = document.body.lastElementChild!;
+    // Het diepste kind: het gebaar begint op een element ín het blokgebied.
+    const target = root.firstElementChild ?? root;
+    touch("touchstart", 10, target);
+    const move = touch("touchmove", 300, target);
+    touch("touchend", null, target);
+    await flushPromises();
+    expect(move.defaultPrevented).toBe(false);
     expect(syncNow).not.toHaveBeenCalled();
   });
 
