@@ -33,10 +33,20 @@ export const LEASE_RENEW_MS = 5_000;
 export const LEASE_POLL_MS = 250;
 /** Wachttijd tussen schrijven en teruglezen: wie het laatst schreef, wint. */
 export const LEASE_SETTLE_MS = 50;
+/**
+ * Hooguit zo lang wachten op het slot van een ander tabblad. Daarna toch
+ * versturen, zonder slot (zoals vroeger): een bevroren of gepauzeerd tabblad
+ * mag de pill, de swipe en het uitloggen hier nooit laten hangen.
+ */
+export const LOCK_WAIT_MS = 30_000;
 
 /** Het deel van de Web Locks API (`LockManager`) dat we gebruiken. */
 export interface LockManagerLike {
-  request<T>(name: string, callback: (lock: unknown) => Promise<T>): Promise<T>;
+  request<T>(
+    name: string,
+    options: { signal?: AbortSignal },
+    callback: (lock: unknown) => Promise<T>,
+  ): Promise<T>;
 }
 
 export interface FlushLockDeps {
@@ -47,6 +57,8 @@ export interface FlushLockDeps {
   owner: string;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
+  /** Maximale wachttijd op het slot (`LOCK_WAIT_MS`). */
+  lockWaitMs: number;
 }
 
 export const flushLockName = (userId: string): string =>
@@ -70,12 +82,14 @@ function defaultDeps(): FlushLockDeps {
     owner: instanceOwner,
     now: () => Date.now(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    lockWaitMs: LOCK_WAIT_MS,
   };
 }
 
 /**
  * Voert `fn` uit terwijl deze instantie het verzendslot van `userId` heeft.
- * Wacht als een andere instantie het heeft. Rejectet alleen als `fn` rejectet.
+ * Wacht als een andere instantie het heeft, hooguit `lockWaitMs`; daarna
+ * draait `fn` zonder slot. Rejectet alleen als `fn` rejectet.
  */
 export async function withFlushLock<T>(
   userId: string,
@@ -85,15 +99,30 @@ export async function withFlushLock<T>(
   const deps: FlushLockDeps = { ...defaultDeps(), ...overrides };
   if (deps.locks) {
     let started = false;
+    let timedOut = false;
+    const abort = new AbortController();
+    const timer = setTimeout(() => {
+      timedOut = true;
+      abort.abort();
+    }, deps.lockWaitMs);
     try {
-      return await deps.locks.request(flushLockName(userId), () => {
-        started = true;
-        return fn();
-      });
+      return await deps.locks.request(
+        flushLockName(userId),
+        { signal: abort.signal },
+        () => {
+          started = true;
+          clearTimeout(timer);
+          return fn();
+        },
+      );
     } catch (err) {
       if (started) throw err;
+      // Te lang gewacht: zonder slot versturen.
+      if (timedOut) return fn();
       // Web Locks weigert (bv. SecurityError in een afgeschermde context):
       // terugvallen op de lease.
+    } finally {
+      clearTimeout(timer);
     }
   }
   return withLease(userId, fn, deps);
@@ -139,17 +168,21 @@ async function withLease<T>(
 
 /**
  * `true` = deze instantie heeft de lease. `false` = de opslag kan geen lease
- * bewaren (geen localStorage, quota, privémodus): dan zonder slot verder.
+ * bewaren (geen localStorage, quota, privémodus) of het wachten duurde langer
+ * dan `lockWaitMs`: dan zonder slot verder.
  */
 async function acquireLease(
   userId: string,
   deps: FlushLockDeps,
 ): Promise<boolean> {
   const { backend, owner, now, sleep } = deps;
+  const deadline = now() + deps.lockWaitMs;
   for (;;) {
     try {
       const current = loadFlushLease(userId, backend);
       if (current && current.owner !== owner && current.expiresAt > now()) {
+        // Te lang gewacht (de houder blijft verlengen): zonder slot verder.
+        if (now() >= deadline) return false;
         await sleep(LEASE_POLL_MS);
         continue;
       }

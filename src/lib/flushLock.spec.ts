@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   LEASE_POLL_MS,
   LEASE_TTL_MS,
+  LOCK_WAIT_MS,
   flushLockName,
   withFlushLock,
   type FlushLockDeps,
@@ -41,6 +42,7 @@ function leaseDeps(
     sleep: async (ms) => {
       clock.now += ms;
     },
+    lockWaitMs: LOCK_WAIT_MS,
   };
 }
 
@@ -139,7 +141,11 @@ describe("withFlushLock — Web Locks", () => {
   it("vraagt het slot per gebruiker aan en gebruikt dan geen lease", async () => {
     const backend = memoryStorage();
     const request = vi.fn(
-      (_name: string, cb: (lock: unknown) => Promise<unknown>) => cb({}),
+      (
+        _name: string,
+        _opts: unknown,
+        cb: (lock: unknown) => Promise<unknown>,
+      ) => cb({}),
     );
     const deps = { ...leaseDeps(backend), locks: { request } as never };
 
@@ -148,6 +154,7 @@ describe("withFlushLock — Web Locks", () => {
     );
     expect(request).toHaveBeenCalledWith(
       flushLockName(USER),
+      { signal: expect.any(AbortSignal) },
       expect.any(Function),
     );
     expect(backend.data.size).toBe(0);
@@ -159,12 +166,69 @@ describe("withFlushLock — Web Locks", () => {
     const deps = {
       ...leaseDeps(backend),
       locks: {
-        request: (_name: string, cb: (lock: unknown) => Promise<unknown>) =>
-          cb({}),
+        request: (
+          _name: string,
+          _opts: unknown,
+          cb: (lock: unknown) => Promise<unknown>,
+        ) => cb({}),
       } as never,
     };
 
     await expect(withFlushLock(USER, fn, deps)).rejects.toThrow("boom");
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("verstuurt zonder slot als een ander tabblad het slot te lang vasthoudt", async () => {
+    const backend = memoryStorage();
+    // Een slot dat nooit vrijkomt (bevroren tabblad); respecteert wel `signal`.
+    const request = (
+      _name: string,
+      opts: { signal?: AbortSignal },
+    ): Promise<never> =>
+      new Promise((_resolve, reject) => {
+        opts.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+    const fn = vi.fn().mockResolvedValue("ok");
+    const deps = {
+      ...leaseDeps(backend),
+      locks: { request } as never,
+      lockWaitMs: 20,
+    };
+
+    await expect(withFlushLock(USER, fn, deps)).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(backend.data.size).toBe(0); // niet ook nog op de lease gewacht
+  });
+});
+
+describe("withFlushLock — lease: maximale wachttijd", () => {
+  it("verstuurt zonder slot als de houder de lease blijft verlengen", async () => {
+    const backend = memoryStorage();
+    const deps = leaseDeps(backend);
+    // Een ander tabblad dat zijn lease steeds verlengt.
+    const sleep = deps.sleep;
+    deps.sleep = async (ms) => {
+      await sleep(ms);
+      saveFlushLease(
+        USER,
+        { owner: "tab-b", expiresAt: deps.clock.now + LEASE_TTL_MS },
+        backend,
+      );
+    };
+    saveFlushLease(
+      USER,
+      { owner: "tab-b", expiresAt: deps.clock.now + LEASE_TTL_MS },
+      backend,
+    );
+    const start = deps.clock.now;
+    const fn = vi.fn().mockResolvedValue("ok");
+
+    await expect(withFlushLock(USER, fn, deps)).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(deps.clock.now - start).toBeGreaterThanOrEqual(LOCK_WAIT_MS);
+    // De lease van het andere tabblad blijft staan.
+    expect(loadFlushLease(USER, backend)?.owner).toBe("tab-b");
   });
 });

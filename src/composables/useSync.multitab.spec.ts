@@ -76,7 +76,11 @@ async function openTab() {
 function fakeLocks(): LockManagerLike {
   const tails = new Map<string, Promise<void>>();
   return {
-    request<T>(name: string, callback: (lock: unknown) => Promise<T>) {
+    request<T>(
+      name: string,
+      _options: { signal?: AbortSignal },
+      callback: (lock: unknown) => Promise<T>,
+    ) {
       const previous = tails.get(name) ?? Promise.resolve();
       let release!: () => void;
       const held = new Promise<void>((resolve) => (release = resolve));
@@ -211,5 +215,33 @@ describe("useSync — één verzender over tabbladen heen (issue #7)", () => {
     b.bindSyncUser(null);
     window.dispatchEvent(new StorageEvent("storage", { key: QUEUE_KEY }));
     expect(syncB.status.value).toBe("synced");
+  });
+
+  it("leest een localStorage.clear() uit een ander tabblad (key null)", async () => {
+    seedQueue(["op-1"]);
+    const { b } = await twoTabs();
+    const syncB = b.useSync();
+    expect(syncB.status.value).toBe("pending");
+
+    localStorage.clear();
+    window.dispatchEvent(new StorageEvent("storage", { key: null }));
+
+    expect(syncB.status.value).toBe("synced");
+    expect(syncB.queueLength.value).toBe(0);
+  });
+
+  it("verstuurt niets als de gebruiker wisselt terwijl op het slot gewacht wordt", async () => {
+    setLocks(fakeLocks());
+    seedQueue(["op-1"]);
+    const { a, b } = await twoTabs();
+
+    const flushA = a.flushNow(); // A heeft het slot
+    const flushB = b.flushNow(); // B wacht erop
+    b.bindSyncUser("user-2"); // B wisselt van gebruiker tijdens het wachten
+
+    await expect(flushA).resolves.toBe(true);
+    await expect(flushB).resolves.toBe(false);
+    expect(mockFlushOutbox).toHaveBeenCalledTimes(1);
+    expect(mockFlushOutbox.mock.calls[0]?.[0]).toBe(USER);
   });
 });

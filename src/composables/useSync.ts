@@ -301,11 +301,17 @@ async function doFlush(): Promise<boolean> {
     if (result.ok) {
       lastSyncedAt.value = new Date().toISOString();
       // Bewaren, zodat andere tabbladen het tijdstip via `storage` volgen.
-      saveSyncMeta(
-        userId,
-        { lastSyncedAt: lastSyncedAt.value, lastError: null },
-        browserStorage,
-      );
+      // Best effort: een volle of geblokkeerde opslag maakt een geslaagde
+      // flush niet alsnog tot een fout (en start geen retry-lus).
+      try {
+        saveSyncMeta(
+          userId,
+          { lastSyncedAt: lastSyncedAt.value, lastError: null },
+          browserStorage,
+        );
+      } catch {
+        // Alleen het tijdstip in andere tabbladen loopt dan achter.
+      }
     }
     // refreshStatus() leidt de status af uit de outbox; de fout zit erin
     // gemarkeerd, dus bij niet-ok wordt dit "error".
