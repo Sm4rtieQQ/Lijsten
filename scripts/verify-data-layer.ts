@@ -9,6 +9,8 @@
  *  4. Foutafhandeling: attempts/lastError worden bijgehouden, retry lukt daarna.
  *  5. Outbox van gebruiker B wordt nooit aangeraakt bij een flush van A.
  *  6. `pullListsFromServer` filtert expliciet op `owner_id` en mapt naar domeintypes.
+ *  7. Een blijvend geweigerde operatie wordt geparkeerd (bewaard, nooit
+ *     verwijderd) en houdt de rest niet op; wat ervan afhangt wacht (#10).
  *
  * Uitvoeren met: `npm run verify:data`
  * (rolldown bundelt dit bundel naar een tijdelijk bestand, node voert het uit).
@@ -29,7 +31,12 @@ import type { StorageBackend } from "../src/lib/storage";
 import { flushOutbox, pullListsFromServer, backoffMs } from "../src/lib/sync";
 import { DUPLICATE_ERROR } from "../src/lib/errorMessages";
 import { isExactTitleMatch } from "../src/lib/utils";
-import { type OutboxEntry, type OutboxOpPayload } from "../src/types/sync";
+import { PARK_AFTER_ATTEMPTS } from "../src/lib/outbox";
+import {
+  isParked,
+  type OutboxEntry,
+  type OutboxOpPayload,
+} from "../src/types/sync";
 import type { List, ListItem } from "../src/types/app";
 
 // ---------------------------------------------------------------------------
@@ -1083,6 +1090,81 @@ async function testDuplicateKeyCountsAsDone(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Permanente fouten parkeren (#10)
+// ---------------------------------------------------------------------------
+
+async function testParkPermanentErrors(): Promise<void> {
+  const mem = memoryStorage();
+  // L1 bestaat niet meer op de server (bv. verwijderd op een ander apparaat):
+  // elke poging om hem aan te maken loopt op een blijvende fout.
+  const rejectsL1 = (call: Call) =>
+    call.table === "lists" && (call.row as { id?: string } | null)?.id === "L1"
+      ? { code: "23503", message: "violates foreign key constraint" }
+      : null;
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "list.create", listId: "L1", title: "Weg" }),
+      entry({ type: "item.create", item: item("I1", "L1", "melk") }),
+      entry({ type: "list.create", listId: "L2", title: "Blijft" }),
+      entry({ type: "item.create", item: item("I2", "L2", "brood") }),
+    ],
+    mem,
+  );
+
+  const failing = makeFauxClient({ errorFor: rejectsL1 });
+  let last = await flushOutbox("userA", client(failing.backend), mem);
+  for (let i = 1; i < PARK_AFTER_ATTEMPTS; i += 1) {
+    assert(last.ok === false, "vóór het parkeren stopt de run (FIFO)");
+    last = await flushOutbox("userA", client(failing.backend), mem);
+  }
+
+  assert(last.ok === true, "na het parkeren gaat de rest door");
+  assert(last.parkedCount === 1, "precies één operatie geparkeerd");
+  const queue = loadQueue("userA", mem);
+  assert(
+    queue.length === 2 && isParked(queue[0]!) && !isParked(queue[1]!),
+    "de geparkeerde create en het item dat erop wacht blijven bewaard",
+  );
+  assert(
+    queue[0]!.lastCode === "23503",
+    "de foutcode blijft bewaard voor diagnose",
+  );
+  assert(
+    !failing.calls.some(
+      (call) =>
+        call.table === "list_items" &&
+        JSON.stringify(call.row).includes('"I1"'),
+    ),
+    "het item van de geparkeerde lijst gaat nooit blind de deur uit",
+  );
+  assert(
+    failing.calls.some(
+      (call) =>
+        call.table === "list_items" &&
+        JSON.stringify(call.row).includes('"I2"'),
+    ),
+    "de andere lijst en haar item komen wel aan",
+  );
+
+  const calls = failing.calls.length;
+  await flushOutbox("userA", client(failing.backend), mem);
+  assert(
+    failing.calls.length === calls,
+    "een gewone flush probeert de geparkeerde niet opnieuw",
+  );
+
+  const ok = makeFauxClient();
+  const retried = await flushOutbox("userA", client(ok.backend), mem, {
+    retryParked: true,
+  });
+  assert(
+    retried.ok && loadQueue("userA", mem).length === 0,
+    "lukt de retry, dan gaan de geparkeerde en het wachtende item mee",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 
@@ -1101,6 +1183,7 @@ async function main(): Promise<void> {
   await testReorderViaRpc();
   await testIdempotentCreates();
   await testDuplicateKeyCountsAsDone();
+  await testParkPermanentErrors();
   testExactTitleMatch();
 
   console.log(

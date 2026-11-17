@@ -1,8 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { toUserFacingError } from "./errorMessages";
-import { compactOutbox, nextBatch } from "./outbox";
-import type { OutboxEntry } from "../types/sync";
+import {
+  PARK_AFTER_ATTEMPTS,
+  blockKeys,
+  compactOutbox,
+  isPermanentError,
+  nextBatch,
+  readyEntries,
+} from "./outbox";
+import { isParked, type OutboxEntry } from "../types/sync";
 import type { List } from "../types/app";
 import type { Database } from "./database.types";
 import {
@@ -30,20 +37,36 @@ import {
  * gegarandeerd.
  */
 export interface FlushResult {
+  /**
+   * `true` = niets houdt de wachtrij op: alles wat mocht is verstuurd.
+   * Geparkeerde operaties (#10) en wat erachter wacht kunnen er nog staan.
+   */
   ok: boolean;
   /** Foutmelding als een operatie faalde. */
   error: string | null;
   /** Aantal succesvol verwerkte operaties in deze run. */
   syncedCount: number;
   queuedCount: number;
+  /** Aantal geparkeerde operaties in de wachtrij na de run (#10). */
+  parkedCount: number;
   /** Outbox na de run (voor statusopbouw). */
   queue: OutboxEntry[];
+}
+
+export interface FlushOptions {
+  /**
+   * Ook de geparkeerde operaties opnieuw proberen (#10), elk één keer. Bij
+   * een volledige sync (de pill `Probeer opnieuw`, de swipe, terugkeren naar
+   * de app) en vóór het uitloggen; niet bij de automatische flush/backoff.
+   */
+  retryParked?: boolean;
 }
 
 export async function flushOutbox(
   userId: string,
   client: SupabaseClient<Database>,
   backend: StorageBackend,
+  options: FlushOptions = {},
 ): Promise<FlushResult> {
   const stored = loadQueue(userId, backend);
   // Wachtende operaties eerst samenvoegen (§7.3): minder requests. De
@@ -52,11 +75,33 @@ export async function flushOutbox(
   const queue = compactOutbox(stored);
   if (queue.length !== stored.length) saveQueue(userId, queue, backend);
   if (queue.length === 0) {
-    return { ok: true, error: null, syncedCount: 0, queuedCount: 0, queue };
+    return {
+      ok: true,
+      error: null,
+      syncedCount: 0,
+      queuedCount: 0,
+      parkedCount: 0,
+      queue,
+    };
   }
 
-  const pending = [...queue];
+  /**
+   * Sleutels (item, lijst, volgorde) van geparkeerde operaties: wat daarvan
+   * afhangt wacht erachter en gaat nooit blind de deur uit (#10).
+   */
+  const blocked = new Set<string>();
+  const block = (entry: OutboxEntry): void => {
+    for (const key of blockKeys(entry)) blocked.add(key);
+  };
+  const pending: OutboxEntry[] = [];
+  for (const entry of queue) {
+    if (isParked(entry) && !options.retryParked) block(entry);
+    else pending.push(entry);
+  }
+
   const done: OutboxEntry[] = [];
+  /** Gefaalde operaties met hun nieuwe stand (gemarkeerd of geparkeerd). */
+  const updated = new Map<string, OutboxEntry>();
   let syncedCount = 0;
 
   /**
@@ -66,56 +111,91 @@ export async function flushOutbox(
    * blijft zo staan. Verstuurde operaties komen nooit terug in de wachtrij,
    * anders worden ze bij de retry dubbel verstuurd.
    */
-  const settle = (failed: readonly OutboxEntry[]): OutboxEntry[] => {
+  const settle = (): OutboxEntry[] => {
     const doneIds = new Set(done.map((entry) => entry.opId));
-    const failedById = new Map(failed.map((entry) => [entry.opId, entry]));
     const next = loadQueue(userId, backend)
       .filter((entry) => !doneIds.has(entry.opId))
-      .map((entry) => failedById.get(entry.opId) ?? entry);
+      .map((entry) => updated.get(entry.opId) ?? entry);
     saveQueue(userId, next, backend);
     return next;
   };
 
-  /** Markeert `failed`, bewaart de wachtrij en geeft het foutresultaat. */
-  const fail = (
+  /**
+   * Markeert `failed` (`attempts+1`, `lastError`, `lastCode`). Een operatie
+   * die **alleen** verstuurd werd en blijvend geweigerd is, wordt na
+   * `PARK_AFTER_ATTEMPTS` pogingen geparkeerd; een al geparkeerde blijft
+   * geparkeerd. Geeft `true` als de run moet stoppen (FIFO): er is een
+   * gewone, niet-geparkeerde fout.
+   */
+  const markFailed = (
     failed: readonly OutboxEntry[],
-    error: string | null,
-  ): FlushResult => {
-    const lastError = error ?? "Onbekende synchronisatiefout";
-    const nextQueue = settle(
-      failed.map((entry) => ({
+    result: ApplyResult,
+  ): boolean => {
+    const lastError = result.error ?? "Onbekende synchronisatiefout";
+    // Uit een mislukte bundel is de schuldige rij niet bekend: nooit parkeren.
+    const permanent = failed.length === 1 && isPermanentError(result.code);
+    let stop = false;
+    for (const entry of failed) {
+      const attempts = entry.attempts + 1;
+      const park =
+        isParked(entry) || (permanent && attempts >= PARK_AFTER_ATTEMPTS);
+      const next: OutboxEntry = {
         ...entry,
-        attempts: entry.attempts + 1,
+        attempts,
         lastError,
-      })),
-    );
+        lastCode: result.code,
+      };
+      if (park) next.parkedAt = entry.parkedAt ?? new Date().toISOString();
+      updated.set(entry.opId, next);
+      if (park) block(next);
+      else stop = true;
+    }
+    return stop;
+  };
+
+  /** Bewaart de wachtrij en de sync-meta en geeft het resultaat van de run. */
+  const finish = (error: string | null): FlushResult => {
+    const nextQueue = settle();
     saveSyncMeta(
       userId,
-      {
-        lastSyncedAt: loadSyncMeta(userId, backend).lastSyncedAt,
-        lastError,
-      },
+      error === null
+        ? { lastSyncedAt: new Date().toISOString(), lastError: null }
+        : {
+            lastSyncedAt: loadSyncMeta(userId, backend).lastSyncedAt,
+            lastError: error,
+          },
       backend,
     );
     return {
-      ok: false,
-      error: lastError,
+      ok: error === null,
+      error,
       syncedCount,
+      // Meestal leeg; niet leeg als er iets geparkeerd is, iets wacht, of er
+      // tijdens het versturen iets is gewijzigd (gaat met de volgende run mee).
       queuedCount: nextQueue.length,
+      parkedCount: nextQueue.filter(isParked).length,
       queue: nextQueue,
     };
   };
 
-  while (pending.length > 0) {
-    // Opeenvolgende creates/deletes gaan samen in één request (§7.3).
-    const batch = nextBatch(pending);
+  const succeeded = (entries: readonly OutboxEntry[]): void => {
+    done.push(...entries);
+    syncedCount += entries.length;
+  };
+
+  for (;;) {
+    // Opeenvolgende creates/deletes gaan samen in één request (§7.3); wat
+    // achter een geparkeerde operatie wacht, slaan we over (#10).
+    const batch = nextBatch(readyEntries(pending, blocked));
     if (batch.length === 0) break;
-    pending.splice(0, batch.length);
+    const sent = new Set(batch.map((entry) => entry.opId));
+    for (let i = pending.length - 1; i >= 0; i -= 1) {
+      if (sent.has(pending[i]!.opId)) pending.splice(i, 1);
+    }
 
     const result = await applyBatch(batch, userId, client);
     if (result.ok || isAlreadyCreated(batch, result)) {
-      done.push(...batch);
-      syncedCount += batch.length;
+      succeeded(batch);
       continue;
     }
 
@@ -124,36 +204,24 @@ export async function flushOutbox(
       // alleen de echte duplicaten vallen weg, de rest komt alsnog aan.
       for (const entry of batch) {
         const single = await applyEntry(entry, userId, client);
-        if (!single.ok && !isAlreadyCreated([entry], single)) {
-          // Alleen deze markeren; de nog niet geprobeerde blijven ongemoeid.
-          return fail([entry], single.error);
+        if (single.ok || isAlreadyCreated([entry], single)) {
+          succeeded([entry]);
+          continue;
         }
-        done.push(entry);
-        syncedCount += 1;
+        // Alleen deze markeren; de nog niet geprobeerde blijven ongemoeid.
+        if (markFailed([entry], single)) return finish(single.error);
       }
       continue;
     }
 
     // Een mislukte bundel markeert al zijn operaties; ze blijven op hun plek
-    // (de kop van wat nog moet), het verstuurde gaat eruit.
-    return fail(batch, result.error);
+    // (de kop van wat nog moet), het verstuurde gaat eruit. Geparkeerd: door.
+    if (markFailed(batch, result)) {
+      return finish(result.error ?? "Onbekende synchronisatiefout");
+    }
   }
 
-  saveSyncMeta(
-    userId,
-    { lastSyncedAt: new Date().toISOString(), lastError: null },
-    backend,
-  );
-  // Meestal leeg; niet leeg als er tijdens het versturen iets is gewijzigd —
-  // dat gaat dan met de volgende run mee.
-  const rest = settle([]);
-  return {
-    ok: true,
-    error: null,
-    syncedCount,
-    queuedCount: rest.length,
-    queue: rest,
-  };
+  return finish(null);
 }
 
 /** Maximale wachttijd per server-actie voordat we de verbinding opgeven. */
