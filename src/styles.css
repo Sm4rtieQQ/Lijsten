@@ -1,33 +1,3 @@
-:root {
-  --paper: #f7f1e8;
-  --ink: #342e2a;
-  --muted: #938a80;
-  --line: #e4d7c6;
-  --orange: #e66d35;
-  --orange-dark: #ce5925;
-  --orange-soft: #f9dfd0;
-  --white: #fffdfa;
-}
-* {
-  box-sizing: border-box;
-}
-body {
-  margin: 0;
-  min-width: 320px;
-  color: var(--ink);
-  background: var(--paper);
-  font-family: "DM Sans", sans-serif;
-}
-button,
-input {
-  font: inherit;
-}
-button {
-  cursor: pointer;
-  /* Geen blauwe tap-flash op Android/Capacitor; touch i.p.v. 300ms-delay. */
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
 .app-shell {
   width: min(100%, 760px);
   min-height: 100vh;
@@ -45,16 +15,6 @@ button {
 }
 .view.active {
   display: block;
-}
-@keyframes fade {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 .topbar {
   display: flex;
@@ -82,20 +42,6 @@ button {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.45px;
-}
-h1,
-h2 {
-  font-family: "Playfair Display", serif;
-  letter-spacing: -0.04em;
-}
-h1 {
-  margin: 0;
-  font-size: 42px;
-  line-height: 1.12; /* ruimer dan 1: de descender van de 'j' blijft heel (F1) */
-}
-h2 {
-  margin: 0;
-  font-size: 28px;
 }
 .round-button {
   width: 48px;
@@ -984,11 +930,6 @@ dialog {
 .item input.item-text {
   cursor: text;
 }
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 .item {
   margin-bottom: 10px;
   border-color: #eaded0;
@@ -1245,11 +1186,6 @@ body.no-scroll {
 }
 
 /* ---------- Fase 8: swipe omlaag synchroniseert (§8.14) ---------- */
-/* Geen eigen pull-to-refresh van Chrome/PWA (die herlaadt de pagina). */
-html,
-body {
-  overscroll-behavior-y: contain;
-}
 .pull-indicator {
   position: fixed;
   top: env(safe-area-inset-top, 0px);

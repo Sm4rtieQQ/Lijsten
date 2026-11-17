@@ -1,0 +1,82 @@
+/*
+ * Designtokens: de enige plek met losse kleur-, radius- en schaduwwaarden.
+ * Elk token wordt een Tailwind-utility (`bg-paper`, `text-accent`,
+ * `rounded-card`, `shadow-dialog`, ...). De waarden zijn exact het huidige
+ * uiterlijk (visuele gelijkheid tijdens de migratie, GitHub-issue #13).
+ */
+@theme {
+  /* Geen standaardpalet: alleen deze kleuren bestaan, dus `bg-orange-500`
+     en andere losse kleuren leveren geen CSS op. */
+  --color-*: initial;
+  --color-paper: #f7f1e8;
+  --color-surface: #fffdfa;
+  --color-ink: #342e2a;
+  --color-muted: #938a80;
+  --color-subtle: #b9aea2;
+  --color-line: #e4d7c6;
+  --color-line-strong: #ddccbf;
+  --color-focus: #e6a681;
+  --color-accent: #e66d35;
+  --color-accent-dark: #ce5925;
+  --color-accent-soft: #f9dfd0;
+  --color-positive: #2c6e49;
+  --color-positive-soft: #e4efe8;
+  --color-warning: #8a6d1a;
+  --color-warning-soft: #fdf3d8;
+  --color-warning-dot: #d9a92a;
+  --color-negative: #a3382f;
+  --color-negative-soft: #f6dddd;
+
+  --font-sans: "DM Sans", sans-serif;
+  --font-display: "Playfair Display", serif;
+
+  /* Exact de huidige radii; samenvoegen is een latere beslissing. */
+  --radius-check: 5px;
+  --radius-control: 10px;
+  --radius-button: 11px;
+  --radius-icon: 12px;
+  --radius-row: 13px;
+  --radius-popover: 14px;
+  --radius-form: 15px;
+  --radius-card: 18px;
+  --radius-dialog: 20px;
+  --radius-panel: 22px;
+  --radius-pill: 999px;
+
+  --shadow-card-hover: 0 11px 25px #51382312;
+  --shadow-dialog: 0 22px 60px #3322143b;
+  --shadow-popover: 0 13px 28px rgba(68, 45, 27, 0.14);
+  --shadow-panel: 0 15px 42px rgba(75, 50, 29, 0.08);
+  --shadow-ghost: 0 14px 30px rgba(52, 46, 42, 0.18);
+  --shadow-focus: 0 0 0 3px #e66d351a;
+
+  /* De keyframes staan in main.css (de oude CSS noemt ze bij naam). */
+  --animate-fade: fade 0.22s ease both;
+  --animate-spin-fast: spin 0.7s linear infinite;
+
+  /* Het enige omslagpunt van de app is 520px (desktop-first `max-width`).
+     Mobile-first `sm:` begint één pixel later, dus het omslagpunt blijft. */
+  --breakpoint-sm: 521px;
+
+  --spacing-touch: 44px;
+}
+
+@theme inline {
+  --spacing-safe-top: env(safe-area-inset-top, 0px);
+  --spacing-safe-right: env(safe-area-inset-right, 0px);
+  --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --spacing-safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* Oude namen uit src/styles.css, als alias, zodat ze nooit uiteenlopen.
+   Ze verdwijnen met het oude bestand (GitHub-issue #24). */
+:root {
+  --paper: var(--color-paper);
+  --ink: var(--color-ink);
+  --muted: var(--color-muted);
+  --line: var(--color-line);
+  --orange: var(--color-accent);
+  --orange-dark: var(--color-accent-dark);
+  --orange-soft: var(--color-accent-soft);
+  --white: var(--color-surface);
+}

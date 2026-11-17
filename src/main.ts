@@ -2,7 +2,7 @@ import { createApp } from "vue";
 
 import App from "./App.vue";
 import { registerServiceWorker } from "./pwa/register-sw";
-import "./styles.css";
+import "./styles/main.css";
 
 createApp(App).mount("#app");
 
