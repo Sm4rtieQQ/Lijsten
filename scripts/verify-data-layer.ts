@@ -58,6 +58,8 @@ interface Call {
   row: unknown;
   /** Opties van een `upsert` (onConflict, ignoreDuplicates). */
   options?: unknown;
+  /** Het `AbortSignal` dat de app meegaf (#8). */
+  signal?: AbortSignal;
 }
 
 interface FauxClientOptions {
@@ -79,7 +81,7 @@ function makeFauxClient(options: FauxClientOptions = {}): {
   calls: Call[];
   backend: {
     from: (table: string) => unknown;
-    rpc: (fn: string, args: unknown) => Promise<unknown>;
+    rpc: (fn: string, args: unknown) => unknown;
   };
 } {
   const calls: Call[] = [];
@@ -90,6 +92,7 @@ function makeFauxClient(options: FauxClientOptions = {}): {
     let op = "select";
     let row: unknown = null;
     let upsertOptions: unknown = undefined;
+    let signal: AbortSignal | undefined = undefined;
 
     const record = (): Promise<{
       data: unknown;
@@ -102,6 +105,7 @@ function makeFauxClient(options: FauxClientOptions = {}): {
         orders: [...orders],
         row,
         options: upsertOptions,
+        signal,
       };
       calls.push(call);
       const custom = options.errorFor ? options.errorFor(call) : null;
@@ -115,14 +119,15 @@ function makeFauxClient(options: FauxClientOptions = {}): {
     };
 
     let chain: {
-      insert: (r: unknown) => Promise<unknown>;
-      upsert: (r: unknown, opts?: unknown) => Promise<unknown>;
+      insert: (r: unknown) => typeof chain;
+      upsert: (r: unknown, opts?: unknown) => typeof chain;
       update: (r: unknown) => typeof chain;
       delete: () => typeof chain;
       select: (cols: unknown) => typeof chain;
       eq: (key: string, value: unknown) => typeof chain;
       in: (key: string, values: unknown) => typeof chain;
       order: (column: string, opts?: { ascending?: boolean }) => typeof chain;
+      abortSignal: (s: AbortSignal) => typeof chain;
       then: (
         onFulfilled: (v: unknown) => unknown,
         onRejected: (e: unknown) => unknown,
@@ -133,13 +138,13 @@ function makeFauxClient(options: FauxClientOptions = {}): {
       insert: (r: unknown) => {
         op = "insert";
         row = r;
-        return record();
+        return chain;
       },
       upsert: (r: unknown, opts?: unknown) => {
         op = "upsert";
         row = r;
         upsertOptions = opts;
-        return record();
+        return chain;
       },
       update: (r: unknown) => {
         op = "update";
@@ -168,18 +173,38 @@ function makeFauxClient(options: FauxClientOptions = {}): {
         orders.push(`${column}:${opts?.ascending === false ? "desc" : "asc"}`);
         return chain;
       },
+      abortSignal: (s: AbortSignal) => {
+        signal = s;
+        return chain;
+      },
       then: (onFulfilled, onRejected) => record().then(onFulfilled, onRejected),
     };
     return chain;
   };
 
   const rpc = (fn: string, args: unknown) => {
+    let signal: AbortSignal | undefined = undefined;
+    const thenable = {
+      abortSignal: (s: AbortSignal) => {
+        signal = s;
+        return thenable;
+      },
+      then: (
+        onFulfilled: (v: unknown) => unknown,
+        onRejected: (e: unknown) => unknown,
+      ) => recordRpc(fn, args, signal).then(onFulfilled, onRejected),
+    };
+    return thenable;
+  };
+
+  const recordRpc = (fn: string, args: unknown, signal?: AbortSignal) => {
     const call: Call = {
       table: fn,
       op: "rpc",
       filters: [],
       orders: [],
       row: args,
+      signal,
     };
     calls.push(call);
     if (!options.rpcAvailable) {
@@ -302,6 +327,12 @@ async function testOutboxPerEntityNoBulkWipe(): Promise<void> {
         "delete:lists",
       ]),
     `FIFO per-entiteit operaties (kreeg: ${ops.join(", ")})`,
+  );
+
+  // Elk request krijgt een AbortSignal, zodat een timeout hem afbreekt (#8).
+  assert(
+    faux.calls.every((c) => c.signal instanceof AbortSignal),
+    "elk schrijfrequest heeft een AbortSignal",
   );
 
   // Elke delete heeft een id-filter; een bulk-wipe
@@ -442,6 +473,10 @@ async function testPullExplicitOwnerFilter(): Promise<void> {
         ([key, value]) => key === "owner_id" && value === "userA",
       ),
     "pull filtert expliciet op owner_id = auth.uid()",
+  );
+  assert(
+    select?.signal instanceof AbortSignal,
+    "pull geeft een AbortSignal mee (#8)",
   );
 
   // Defensief: een gefaalde pull geeft lege data + foutmelding, geen crash.
@@ -766,6 +801,10 @@ async function testReorderViaRpc(): Promise<void> {
     faux.calls.map((c) => `${c.op}:${c.table}`).join(",") ===
       "rpc:reorder_items,rpc:reorder_lists",
     "één rpc-call per reorder, geen per-item-updates",
+  );
+  assert(
+    faux.calls.every((c) => c.signal instanceof AbortSignal),
+    "elke rpc-call heeft een AbortSignal (#8)",
   );
   assert(
     JSON.stringify(faux.calls[0]?.row) ===

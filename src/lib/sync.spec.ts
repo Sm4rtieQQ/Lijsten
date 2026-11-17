@@ -1,8 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Database } from "./database.types";
-import { ACCESS_DENIED, DUPLICATE_ERROR, NETWORK_ERROR } from "./errorMessages";
+import {
+  ACCESS_DENIED,
+  CONNECTION_DROPPED,
+  DUPLICATE_ERROR,
+  NETWORK_ERROR,
+} from "./errorMessages";
 import { createOutboxEntry } from "./outbox";
 import { loadQueue, saveQueue, type StorageBackend } from "./storage";
 import { flushOutbox } from "./sync";
@@ -19,6 +24,8 @@ interface Request {
   op: "insert" | "upsert" | "update";
   rows: Row[];
   options?: { onConflict?: string; ignoreDuplicates?: boolean };
+  /** Het `AbortSignal` dat de app meegaf (#8). */
+  signal?: AbortSignal | undefined;
 }
 
 interface FakeServerOptions {
@@ -76,23 +83,43 @@ function fakeServer(options: FakeServerOptions = {}) {
   const rowsOf = (value: Row | Row[]): Row[] =>
     Array.isArray(value) ? value : [value];
 
+  /** Zoals supabase-js: pas bij `then` gaat het request de deur uit. */
+  const lazy = (request: Request) => {
+    const chain = {
+      abortSignal: (signal: AbortSignal) => {
+        request.signal = signal;
+        return chain;
+      },
+      then: (
+        resolve: (v: { error: PgError | null }) => unknown,
+        reject: (e: unknown) => unknown,
+      ) => write(request).then(resolve, reject),
+    };
+    return chain;
+  };
+
   const from = (table: string) => ({
     insert: (value: Row | Row[]) =>
-      write({ table, op: "insert", rows: rowsOf(value) }),
+      lazy({ table, op: "insert", rows: rowsOf(value) }),
     upsert: (value: Row | Row[], opts: NonNullable<Request["options"]>) =>
-      write({ table, op: "upsert", rows: rowsOf(value), options: opts }),
+      lazy({ table, op: "upsert", rows: rowsOf(value), options: opts }),
     update: (patch: Record<string, unknown>) => {
       const filters: Record<string, unknown> = {};
+      let signal: AbortSignal | undefined;
       const chain = {
         eq: (key: string, value: unknown) => {
           filters[key] = value;
+          return chain;
+        },
+        abortSignal: (s: AbortSignal) => {
+          signal = s;
           return chain;
         },
         then: (
           resolve: (v: { error: PgError | null }) => unknown,
           reject: (e: unknown) => unknown,
         ) => {
-          requests.push({ table, op: "update", rows: [] });
+          requests.push({ table, op: "update", rows: [], signal });
           const row = tables.get(table)!.get(String(filters.id));
           if (row) Object.assign(row, patch);
           return Promise.resolve({ error: null }).then(resolve, reject);
@@ -382,4 +409,188 @@ describe("flushOutbox — 23505 op een create telt als gelukt (#5)", () => {
       expect(loadQueue(USER, mem).map((e) => e.attempts)).toEqual([1, 1]);
     },
   );
+});
+
+/** Wat postgrest-js teruggeeft als de fetch werd afgebroken. */
+const ABORTED: PgError = {
+  code: "",
+  message: "AbortError: This operation was aborted",
+};
+
+interface HeldRequest {
+  signal: AbortSignal | undefined;
+  /** Laat het antwoord (eindelijk) aankomen. */
+  finish: (error?: PgError | null) => void;
+}
+
+/**
+ * Nep-Supabase waarvan de eerste `hold` requests blijven hangen tot de test
+ * `finish` aanroept (of, met `honorAbort`, tot het signal wordt afgebroken).
+ * Houdt bij hoeveel requests er tegelijk lopen.
+ */
+function holdingServer(options: { hold: number; honorAbort: boolean }) {
+  const requests: HeldRequest[] = [];
+  const stats = { inFlight: 0, maxInFlight: 0 };
+  let toHold = options.hold;
+
+  const request = () => {
+    let signal: AbortSignal | undefined;
+    const chain = {
+      abortSignal: (s: AbortSignal) => {
+        signal = s;
+        return chain;
+      },
+      then: (
+        resolve: (v: { error: PgError | null }) => unknown,
+        reject: (e: unknown) => unknown,
+      ) => {
+        stats.inFlight += 1;
+        stats.maxInFlight = Math.max(stats.maxInFlight, stats.inFlight);
+        let finish!: (error?: PgError | null) => void;
+        const answer = new Promise<{ error: PgError | null }>((done) => {
+          let ended = false;
+          finish = (error = null) => {
+            if (ended) return;
+            ended = true;
+            stats.inFlight -= 1;
+            done({ error });
+          };
+        });
+        requests.push({ signal, finish });
+        if (toHold > 0) {
+          toHold -= 1;
+          if (options.honorAbort) {
+            signal?.addEventListener("abort", () => finish(ABORTED));
+          }
+        } else {
+          finish(null);
+        }
+        return answer.then(resolve, reject);
+      },
+    };
+    return chain;
+  };
+
+  return {
+    requests,
+    stats,
+    client: {
+      from: () => ({ upsert: request }),
+    } as unknown as SupabaseClient<Database>,
+  };
+}
+
+describe("flushOutbox — een timeout breekt het request af (#8)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("elk request krijgt een AbortSignal", async () => {
+    const server = fakeServer();
+    const mem = memoryStorage();
+    saveQueue(
+      USER,
+      [
+        entry({ type: "list.create", listId: "L1", title: "X" }),
+        createItem("I1"),
+        createItem("I2"),
+        entry({ type: "item.update", item: { ...item("I3"), done: true } }),
+      ],
+      mem,
+    );
+
+    expect((await flushOutbox(USER, server.client, mem)).ok).toBe(true);
+
+    expect(server.requests).toHaveLength(3);
+    for (const request of server.requests) {
+      expect(request.signal).toBeInstanceOf(AbortSignal);
+      expect(request.signal!.aborted).toBe(false);
+    }
+  });
+
+  it("na de timeout wordt het lopende request afgebroken", async () => {
+    const server = holdingServer({ hold: 1, honorAbort: true });
+    const mem = memoryStorage();
+    saveQueue(USER, [createItem("I1")], mem);
+
+    const run = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(server.requests[0]!.signal!.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await run;
+
+    expect(server.requests[0]!.signal!.aborted).toBe(true);
+    expect(result).toMatchObject({ ok: false, error: CONNECTION_DROPPED });
+    expect(loadQueue(USER, mem)[0]).toMatchObject({ attempts: 1 });
+    expect(server.stats.inFlight).toBe(0);
+  });
+
+  it("de retry gaat pas de deur uit als het afgebroken request gestopt is", async () => {
+    // Het afbreken komt niet meteen door (bv. de server is al bezig).
+    const server = holdingServer({ hold: 1, honorAbort: false });
+    const mem = memoryStorage();
+    saveQueue(USER, [createItem("I1")], mem);
+
+    const first = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect((await first).ok).toBe(false);
+
+    const retry = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(5_000);
+    // Het eerste request loopt nog: geen tweede kopie ernaast.
+    expect(server.requests).toHaveLength(1);
+
+    server.requests[0]!.finish(ABORTED);
+    await vi.advanceTimersByTimeAsync(0);
+    const result = await retry;
+
+    expect(server.requests).toHaveLength(2);
+    expect(result).toMatchObject({ ok: true, queuedCount: 0 });
+    expect(server.stats.maxInFlight).toBe(1);
+  });
+
+  it("stopt het vorige request niet, dan faalt de retry zonder te versturen", async () => {
+    const server = holdingServer({ hold: 1, honorAbort: false });
+    const mem = memoryStorage();
+    saveQueue(USER, [createItem("I1")], mem);
+
+    const first = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await first;
+
+    const retry = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await retry;
+
+    expect(result).toMatchObject({ ok: false, error: CONNECTION_DROPPED });
+    expect(server.requests).toHaveLength(1);
+    expect(loadQueue(USER, mem)[0]).toMatchObject({ attempts: 2 });
+
+    // Pas als het eerste request gestopt is, mag de volgende poging weer.
+    server.requests[0]!.finish(ABORTED);
+    const later = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await later).toMatchObject({ ok: true, queuedCount: 0 });
+    expect(server.stats.maxInFlight).toBe(1);
+  });
+
+  it("twee gelijktijdige runs sturen hun requests na elkaar, niet naast elkaar", async () => {
+    const server = holdingServer({ hold: 1, honorAbort: true });
+    const mem = memoryStorage();
+    saveQueue(USER, [createItem("I1")], mem);
+
+    const a = flushOutbox(USER, server.client, mem);
+    const b = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(server.requests).toHaveLength(1);
+
+    server.requests[0]!.finish(null);
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.all([a, b]);
+
+    expect(server.stats.maxInFlight).toBe(1);
+  });
 });
