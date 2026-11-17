@@ -124,7 +124,7 @@ watch(
 watch(
   showSplash,
   (show) => {
-    document.body.classList.toggle("no-scroll", show);
+    document.body.classList.toggle("overflow-hidden", show);
   },
   { immediate: true },
 );
@@ -234,7 +234,11 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-shell">
     <!-- Groene bevestiging na e-mailverificatie (AGENTS.md §7.6). -->
-    <p v-if="justVerified && !showSplash" class="banner-success" role="status">
+    <p
+      v-if="justVerified && !showSplash"
+      class="fixed top-3.5 left-1/2 z-30 m-0 max-w-[calc(100%-28px)] -translate-x-1/2 rounded-pill border border-[#b7e0c4] bg-[#e4f5ea] px-[18px] py-2.5 text-[13px] font-bold text-[#1c6b3a] shadow-[0_10px_26px_rgba(46,92,63,0.16)]"
+      role="status"
+    >
       Je account is bevestigd.
     </p>
 
