@@ -19,6 +19,14 @@ vi.mock("../lib/storage", () => ({
   saveSyncMeta: vi.fn(),
   loadQueue: mockLoadQueue,
   browserStorage: {},
+  queueKey: (userId: string) => `lijstjes:queue:${userId}`,
+  syncMetaKey: (userId: string) => `lijstjes:sync:${userId}`,
+}));
+
+// Het slot over tabbladen heen staat in useSync.multitab.spec.ts; hier geldt
+// één instantie, dus gewoon doorlopen.
+vi.mock("../lib/flushLock", () => ({
+  withFlushLock: (_userId: string, fn: () => Promise<unknown>) => fn(),
 }));
 
 vi.mock("../lib/supabase", () => ({

@@ -33,6 +33,8 @@ const dataKey = (userId: string): string => `lijstjes:data:${userId}`;
 const queueKey = (userId: string): string => `lijstjes:queue:${userId}`;
 const syncMetaKey = (userId: string): string => `lijstjes:sync:${userId}`;
 const viewKey = (userId: string): string => `lijstjes:view:${userId}`;
+const flushLeaseKey = (userId: string): string =>
+  `lijstjes:flush-lease:${userId}`;
 
 export interface SyncMeta {
   /** ISO-tijdstip van de laatste succesvolle sync, of null als nog nooit. */
@@ -132,7 +134,49 @@ export function saveActiveView(
   else backend.setItem(viewKey(userId), JSON.stringify(listId));
 }
 
-/** Wist alle per-user keys (data + outbox + sync-meta + pagina). Wordt aangeroepen bij uitloggen. */
+/**
+ * Lease op het versturen van de outbox (terugval als Web Locks ontbreekt, zie
+ * `lib/flushLock.ts`): welke instantie verstuurt nu, en tot wanneer geldt dat
+ * als er geen verlenging komt.
+ */
+export interface FlushLease {
+  owner: string;
+  /** Epoch-ms; daarna mag een andere instantie de lease overnemen. */
+  expiresAt: number;
+}
+
+export function loadFlushLease(
+  userId: string,
+  backend: StorageBackend = browserStorage,
+): FlushLease | null {
+  const parsed = parseJson<unknown>(backend.getItem(flushLeaseKey(userId)));
+  if (parsed === null || typeof parsed !== "object") return null;
+  const lease = parsed as Partial<FlushLease>;
+  return typeof lease.owner === "string" && typeof lease.expiresAt === "number"
+    ? { owner: lease.owner, expiresAt: lease.expiresAt }
+    : null;
+}
+
+export function saveFlushLease(
+  userId: string,
+  lease: FlushLease,
+  backend: StorageBackend = browserStorage,
+): void {
+  backend.setItem(flushLeaseKey(userId), JSON.stringify(lease));
+}
+
+/** Geeft de lease vrij, maar alleen als `owner` hem nog heeft. */
+export function releaseFlushLease(
+  userId: string,
+  owner: string,
+  backend: StorageBackend = browserStorage,
+): void {
+  if (loadFlushLease(userId, backend)?.owner === owner) {
+    backend.removeItem(flushLeaseKey(userId));
+  }
+}
+
+/** Wist alle per-user keys (data + outbox + sync-meta + pagina + lease). Wordt aangeroepen bij uitloggen. */
 export function clearUserData(
   userId: string,
   backend: StorageBackend = browserStorage,
@@ -141,6 +185,7 @@ export function clearUserData(
   backend.removeItem(queueKey(userId));
   backend.removeItem(syncMetaKey(userId));
   backend.removeItem(viewKey(userId));
+  backend.removeItem(flushLeaseKey(userId));
 }
 
-export { dataKey, queueKey, syncMetaKey, viewKey };
+export { dataKey, queueKey, syncMetaKey, viewKey, flushLeaseKey };
