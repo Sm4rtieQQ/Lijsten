@@ -7,6 +7,8 @@ import { useDragReorder } from "../composables/useDragReorder";
 import { useLists } from "../composables/useLists";
 import ItemRow from "./ItemRow.vue";
 import SyncIndicator from "./SyncIndicator.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 import type { ListItem } from "../types/app";
 
 const {
@@ -205,12 +207,18 @@ function onClearCompleted(): void {
       </header>
 
       <header class="detail-header">
-        <button class="back-button" type="button" @click="goBack">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m15 18-6-6 6-6" />
-          </svg>
+        <UiButton variant="text-muted" @click="goBack">
+          <template #icon>
+            <svg
+              class="w-[21px] stroke-2"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </template>
           Alle lijstjes
-        </button>
+        </UiButton>
       </header>
 
       <form class="new-item-form" novalidate @submit.prevent="onAddItem">
@@ -222,21 +230,20 @@ function onClearCompleted(): void {
           autocomplete="off"
           aria-label="Nieuw item toevoegen"
         />
-        <button class="add-item-button" type="submit" aria-label="Toevoegen">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
+        <UiIconButton variant="solid" type="submit" label="Toevoegen">
+          <svg class="stroke-[2.3]" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
           </svg>
-        </button>
+        </UiIconButton>
       </form>
 
       <div class="item-meta">
         <span>{{ itemCount === 1 ? "1 item" : `${itemCount} items` }}</span>
-        <button
-          class="clear-button"
-          :class="{ 'is-armed': isArmed(CLEAR_KEY) }"
-          type="button"
+        <UiButton
+          variant="text"
+          data-testid="clear-completed"
           :disabled="!canClear"
-          :aria-pressed="isArmed(CLEAR_KEY) ? 'true' : 'false'"
+          :armed="isArmed(CLEAR_KEY)"
           :aria-label="
             isArmed(CLEAR_KEY)
               ? 'Bevestigen: afgevinkte items verwijderen'
@@ -244,16 +251,22 @@ function onClearCompleted(): void {
           "
           @click="onClearCompleted"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.5 3.5 11.5 12.5" />
-            <path d="M10 11l3 3" />
-            <path d="M10 11 3.5 16.5" />
-            <path d="M13 14 8.5 21.5" />
-            <path d="M3.5 16.5 8.5 21.5" />
-          </svg>
+          <template #icon>
+            <svg
+              class="size-4 flex-none stroke-[1.8]"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M20.5 3.5 11.5 12.5" />
+              <path d="M10 11l3 3" />
+              <path d="M10 11 3.5 16.5" />
+              <path d="M13 14 8.5 21.5" />
+              <path d="M3.5 16.5 8.5 21.5" />
+            </svg>
+          </template>
           <span>Verwijder afgevinkt</span>
           <span v-if="doneCount > 0">({{ doneCount }})</span>
-        </button>
+        </UiButton>
       </div>
 
       <ul v-if="list.items.length" class="items-list">

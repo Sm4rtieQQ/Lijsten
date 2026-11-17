@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
+import {
+  flushPromises,
+  mount,
+  type DOMWrapper,
+  type VueWrapper,
+} from "@vue/test-utils";
 
 const { mockSignUp } = vi.hoisted(() => ({ mockSignUp: vi.fn() }));
 
@@ -22,6 +27,18 @@ vi.mock("../lib/supabase", () => ({
 
 import RegisterView from "./RegisterView.vue";
 import { useAuth } from "../composables/useAuth";
+
+/** De knop met precies deze tekst (specs zoeken niet op stijlklassen). */
+function buttonWithText(
+  wrapper: VueWrapper,
+  text: string,
+): DOMWrapper<Element> {
+  const button = wrapper
+    .findAll("button")
+    .find((candidate) => candidate.text() === text);
+  if (!button) throw new Error(`Geen knop met de tekst "${text}"`);
+  return button;
+}
 
 const AUTH = useAuth();
 
@@ -143,7 +160,7 @@ describe("RegisterView — open registratie (AGENTS.md §7.6)", () => {
 
   it("emit 'cancel' via de terug-knop", async () => {
     const wrapper = mount(RegisterView);
-    await wrapper.get("button.forgot-password").trigger("click");
+    await buttonWithText(wrapper, "Terug naar inloggen").trigger("click");
 
     expect(wrapper.emitted("cancel")).toBeTruthy();
   });

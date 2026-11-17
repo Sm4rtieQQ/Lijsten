@@ -26,6 +26,12 @@
   --color-warning-dot: #d9a92a;
   --color-negative: #a3382f;
   --color-negative-soft: #f6dddd;
+  /* Knoppen (GitHub-issue #15): tekst op de accentkleur, de hoverrand van
+     de accountknop, de iconen op een item en de uitgeschakelde tekstknop. */
+  --color-white: #fff;
+  --color-accent-line: #e7b69d;
+  --color-icon: #aa9e91;
+  --color-disabled: #c6bdb3;
 
   --font-sans: "DM Sans", sans-serif;
   --font-display: "Playfair Display", serif;

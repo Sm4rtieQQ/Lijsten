@@ -59,8 +59,7 @@
   background: var(--orange-dark);
   transform: translateY(-2px);
 }
-.round-button svg,
-.add-item-button svg {
+.round-button svg {
   width: 24px;
   fill: none;
   stroke: currentColor;
@@ -157,34 +156,6 @@
 .card-arrow {
   color: var(--orange);
   font-size: 21px;
-}
-.card-delete {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 44px;
-  height: 44px;
-  padding: 12px;
-  border: 0;
-  border-radius: 50%;
-  color: #b9aea2;
-  background: transparent;
-  cursor: pointer;
-  transition: 0.18s;
-}
-.card-delete:hover,
-.card-delete:focus-visible {
-  color: var(--orange-dark);
-  background: var(--orange-soft);
-}
-.card-delete svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .panel-header {
   /* Ruimte + subtiele lijn tussen '+ Nieuw lijstje' en het Account-blok (E-aanpassing). */
@@ -367,34 +338,6 @@
   color: var(--muted);
   line-height: 1.55;
 }
-.text-button,
-.clear-button {
-  padding: 0;
-  border: 0;
-  color: var(--orange);
-  background: none;
-  font-weight: 700;
-}
-.text-button:hover,
-.clear-button:hover {
-  color: var(--orange-dark);
-}
-.clear-button {
-  padding: 4px 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.clear-button svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
 /* Zelfde opbouw als de topbar op het overzicht: titel links, indicator rechts. */
 .detail-topbar {
   display: flex;
@@ -413,57 +356,6 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 25px;
-}
-.back-button {
-  border: 0;
-  display: flex;
-  gap: 3px;
-  align-items: center;
-  padding: 5px 0;
-  color: var(--muted);
-  background: none;
-  font-size: 14px;
-  font-weight: 600;
-}
-.back-button:hover {
-  color: var(--ink);
-}
-.back-button svg {
-  width: 21px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.icon-button {
-  width: 38px;
-  height: 38px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--muted);
-  background: transparent;
-}
-.icon-button:hover {
-  color: var(--orange);
-  border-color: #e7b69d;
-}
-/* Actief zolang het accountmenu open is; bij sluiten vervalt de klasse en
-   geldt weer de normale `.icon-button`-stijl (E3). */
-.icon-button.is-active {
-  color: #fff;
-  background: var(--orange);
-  border-color: var(--orange);
-}
-.icon-button svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .list-title-row {
   position: relative;
@@ -520,28 +412,12 @@
 .new-item-form input::placeholder {
   color: #b2a79b;
 }
-.add-item-button {
-  width: 45px;
-  border: 0;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: var(--orange);
-}
-.add-item-button:hover {
-  background: var(--orange-dark);
-}
 .item-meta {
   display: flex;
   justify-content: space-between;
   margin: 18px 2px 10px;
   color: var(--muted);
   font-size: 13px;
-}
-.clear-button:disabled {
-  color: #c6bdb3;
-  cursor: default;
 }
 .items-list {
   margin: 0;
@@ -627,34 +503,6 @@
   color: #aaa198;
   text-decoration: line-through;
 }
-.edit-button {
-  width: 30px;
-  height: 30px;
-  flex: none;
-  padding: 7px;
-  border: 0;
-  border-radius: 8px;
-  color: #aa9e91;
-  background: transparent;
-  opacity: 0;
-}
-.item:hover .edit-button,
-.edit-button:focus {
-  opacity: 1;
-}
-.edit-button:hover {
-  color: var(--orange);
-  background: var(--orange-soft);
-}
-.edit-button svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
 .list-empty {
   margin-top: 44px;
   color: #aaa095;
@@ -696,43 +544,6 @@ dialog {
 .new-list-dialog input:focus {
   border-color: var(--orange);
 }
-.dialog-close {
-  position: absolute;
-  top: 15px;
-  right: 17px;
-  width: 31px;
-  height: 31px;
-  border: 0;
-  border-radius: 50%;
-  color: var(--muted);
-  background: transparent;
-  font-size: 26px;
-  line-height: 1;
-}
-.dialog-close:hover {
-  color: var(--ink);
-  background: var(--paper);
-}
-.dialog-submit {
-  width: 100%;
-  margin-top: 25px;
-  padding: 14px;
-  border: 0;
-  border-radius: 11px;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  color: #fff;
-  background: var(--orange);
-  font-weight: 700;
-}
-.dialog-submit:hover {
-  background: var(--orange-dark);
-}
-.dialog-submit span {
-  font-size: 19px;
-  line-height: 16px;
-}
 .login-title {
   display: flex;
   align-items: center;
@@ -747,37 +558,6 @@ dialog {
 }
 .login-title .app-mark {
   margin: 0;
-}
-.forgot-password {
-  justify-self: start;
-  margin-top: -4px;
-  font-size: 13px;
-}
-.button-secondary {
-  width: 100%;
-  min-height: 44px;
-  padding: 11px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--orange);
-  background: transparent;
-  font-family: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.button-secondary:hover:not(:disabled) {
-  border-color: var(--orange);
-  background: var(--orange-soft);
-}
-.button-secondary:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.login-register {
-  margin-top: 12px;
-}
-.verify-resend {
-  margin-top: 18px;
 }
 .below-title {
   /* Geen eigen bovenmarge meer: de ruimte zit nu in `padding-bottom` van het
@@ -837,16 +617,6 @@ dialog {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.icon-button {
-  display: grid;
-  place-items: center;
-}
-.icon-button svg {
-  display: block;
-}
-.icon-button.is-refreshing svg {
-  animation: spin 0.8s linear infinite;
 }
 .refresh-status {
   position: fixed;
@@ -927,63 +697,6 @@ dialog {
 .check-button svg {
   width: 12px;
 }
-.item-delete-button {
-  width: 30px;
-  height: 30px;
-  flex: none;
-  padding: 7px;
-  border: 0;
-  border-radius: 8px;
-  color: #aa9e91;
-  background: transparent;
-  opacity: 0;
-}
-.item:hover .item-delete-button,
-.item-delete-button:focus {
-  opacity: 1;
-}
-.item-delete-button:hover {
-  color: var(--orange);
-  background: var(--orange-soft);
-}
-.item-delete-button svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-/* Fase B: twee-staps verwijderen (§8.6). De armed-stijl is ook zónder hover
-   zichtbaar — een touchscherm heeft geen hover. Focus-ring blijft ongewijzigd. */
-.item-delete-button,
-.clear-button {
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease,
-    opacity 0.18s ease,
-    padding 0.18s ease;
-}
-.item-delete-button.is-armed {
-  opacity: 1;
-  color: #fff;
-  background: var(--orange);
-}
-.item-delete-button.is-armed:hover {
-  color: #fff;
-  background: var(--orange-dark);
-}
-.clear-button.is-armed {
-  padding: 4px 8px;
-  border-radius: 10px;
-  color: #fff;
-  background: var(--orange);
-}
-.clear-button.is-armed:hover {
-  color: #fff;
-  background: var(--orange-dark);
-}
 .refresh-status[hidden] {
   display: none;
 }
@@ -1014,12 +727,6 @@ dialog {
   }
   .item {
     padding-left: 7px;
-  }
-  .edit-button {
-    opacity: 1;
-  }
-  .item-delete-button {
-    opacity: 1;
   }
 }
 
@@ -1149,13 +856,13 @@ dialog {
 
 /* ---------- Fase 9: uitloggen met niet-verstuurde wijzigingen (§7.3) ---------- */
 /* Gewapend volgens §8.6: oranje met witte tekst, zichtbaar zonder hover. */
-.panel-logout.is-armed,
-.panel-logout.is-armed:hover {
+.panel-logout[aria-pressed="true"],
+.panel-logout[aria-pressed="true"]:hover {
   color: #fff;
   background: var(--orange);
   font-weight: 700;
 }
-.panel-logout.is-armed:hover {
+.panel-logout[aria-pressed="true"]:hover {
   background: var(--orange-dark);
 }
 .panel-logout:disabled {

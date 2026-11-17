@@ -9,6 +9,7 @@ import { useLists } from "../composables/useLists";
 import { createList } from "../types/app";
 
 const AUTH = useAuth();
+const ACCOUNT_BUTTON = 'button[aria-label="Account en acties"]';
 
 describe("HomeView (accountmenu, AGENTS.md §8.8)", () => {
   let wrapper: VueWrapper | undefined;
@@ -28,7 +29,7 @@ describe("HomeView (accountmenu, AGENTS.md §8.8)", () => {
     // Menu is standaard gesloten.
     expect(wrapper.get(".account-panel").attributes("hidden")).toBeDefined();
 
-    await wrapper.get(".icon-button").trigger("click");
+    await wrapper.get(ACCOUNT_BUTTON).trigger("click");
 
     expect(wrapper.get(".account-panel").attributes("hidden")).toBeUndefined();
     const items = wrapper
@@ -43,25 +44,23 @@ describe("HomeView (accountmenu, AGENTS.md §8.8)", () => {
     ]);
   });
 
-  it("markeert de accountknop als actief en zet aria-expanded", async () => {
+  it("zet aria-expanded op de accountknop (de oranje stijl hangt daaraan)", async () => {
     wrapper = mount(HomeView);
-    const button = wrapper.get(".icon-button");
-    expect(button.classes()).not.toContain("is-active");
+    const button = wrapper.get(ACCOUNT_BUTTON);
     expect(button.attributes("aria-expanded")).toBe("false");
 
     await button.trigger("click");
-    expect(button.classes()).toContain("is-active");
     expect(button.attributes("aria-expanded")).toBe("true");
     expect(button.attributes("aria-controls")).toBe("account-panel");
   });
 
   it("sluit het menu weer bij een tweede klik op de accountknop", async () => {
     wrapper = mount(HomeView);
-    const button = wrapper.get(".icon-button");
+    const button = wrapper.get(ACCOUNT_BUTTON);
     await button.trigger("click");
-    expect(button.classes()).toContain("is-active");
+    expect(button.attributes("aria-expanded")).toBe("true");
     await button.trigger("click");
-    expect(button.classes()).not.toContain("is-active");
+    expect(button.attributes("aria-expanded")).toBe("false");
     expect(wrapper.get(".account-panel").attributes("hidden")).toBeDefined();
   });
 });
@@ -72,7 +71,7 @@ describe("HomeView — Android-terugknop (AGENTS.md §8.13)", () => {
 
   it("sluit eerst het open accountmenu; daarna laat hij het door", async () => {
     wrapper = mount(HomeView);
-    await wrapper.get(".icon-button").trigger("click");
+    await wrapper.get(ACCOUNT_BUTTON).trigger("click");
 
     expect(handleBack()).toBe(true);
     await wrapper.vm.$nextTick();

@@ -323,7 +323,7 @@ Het accountmenu (`HomeView.vue`) heeft deze **volgorde**, exact:
 3. `<email>` van de ingelogde gebruiker
 4. `Uitloggen`
 
-- De **accountknop wordt oranje** zodra het menu open is, en wordt **hersteld** naar de normale stijl zodra het menu weer sluit (klasse `is-active`).
+- De **accountknop wordt oranje** zodra het menu open is, en wordt **hersteld** naar de normale stijl zodra het menu weer sluit (de stijl hangt aan `aria-expanded="true"`, `UiIconButton`).
 - **In de Android-app wordt de knop niet blauw bij tikken.** Onderdruk de standaard tap-highlight van het platform: `-webkit-tap-highlight-color: transparent` (en `touch-action: manipulation`) voor knoppen. De focusring blijft zichtbaar via `:focus-visible` — dus nooit `outline: none` zonder alternatief.
 - Toegankelijkheid: `aria-expanded` en `aria-controls` op de knop, ESC sluit het menu, focus gaat terug naar de knop, klikken buiten sluit (bestaande `onDocumentClick`).
 

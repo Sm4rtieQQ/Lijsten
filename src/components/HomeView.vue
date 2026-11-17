@@ -17,6 +17,8 @@ import { useLists } from "../composables/useLists";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.vue";
 import ListCard from "./ListCard.vue";
 import SyncIndicator from "./SyncIndicator.vue";
+import UiButton from "./ui/UiButton.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 import type { List } from "../types/app";
 
 const { user, signOut } = useAuth();
@@ -31,7 +33,7 @@ const {
 
 const accountOpen = ref(false);
 const accountRef = ref<HTMLElement | null>(null);
-const accountButtonRef = ref<HTMLButtonElement | null>(null);
+const accountButtonRef = ref<InstanceType<typeof UiIconButton> | null>(null);
 const newListTitle = ref("");
 const newListDialog = ref<HTMLDialogElement | null>(null);
 const newListInput = ref<HTMLInputElement | null>(null);
@@ -187,20 +189,17 @@ const ghostStyle = computed(() =>
       <div class="topbar-right">
         <SyncIndicator />
         <div class="home-actions" ref="accountRef">
-          <button
+          <UiIconButton
             ref="accountButtonRef"
-            class="icon-button"
-            :class="{ 'is-active': accountOpen }"
-            type="button"
-            aria-label="Account en acties"
+            label="Account en acties"
             :aria-expanded="accountOpen"
             aria-controls="account-panel"
             @click="toggleAccount"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="stroke-[1.7]" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
-          </button>
+          </UiIconButton>
           <div class="account-panel" :hidden="!accountOpen" id="account-panel">
             <button
               class="panel-action panel-add"
@@ -221,7 +220,6 @@ const ghostStyle = computed(() =>
             </p>
             <button
               class="panel-action panel-logout"
-              :class="{ 'is-armed': isLogoutArmed(LOGOUT_KEY) }"
               type="button"
               :disabled="loggingOut"
               :aria-pressed="isLogoutArmed(LOGOUT_KEY) ? 'true' : 'false'"
@@ -277,21 +275,21 @@ const ghostStyle = computed(() =>
       <div class="empty-icon">+</div>
       <h2>Nog geen lijstjes</h2>
       <p>Maak je eerste lijstje en houd alles heerlijk overzichtelijk.</p>
-      <button class="text-button" type="button" @click="openNewListDialog">
+      <UiButton variant="text" @click="openNewListDialog">
         Maak een lijstje
-      </button>
+      </UiButton>
     </div>
 
     <dialog ref="newListDialog" class="new-list-dialog">
       <form class="new-list-form" novalidate @submit.prevent="onCreateList">
-        <button
-          class="dialog-close"
-          type="button"
-          aria-label="Sluiten"
+        <UiIconButton
+          variant="close"
+          class="absolute top-[15px] right-[17px]"
+          label="Sluiten"
           @click="closeNewListDialog"
         >
           &times;
-        </button>
+        </UiIconButton>
         <p class="eyebrow">NIEUW LIJSTJE</p>
         <h2>Hoe heet het lijstje?</h2>
         <input
@@ -303,9 +301,10 @@ const ghostStyle = computed(() =>
           autocomplete="off"
           aria-label="Naam van het lijstje"
         />
-        <button class="dialog-submit" type="submit">
-          Maak lijstje <span>&#8594;</span>
-        </button>
+        <UiButton type="submit" block class="mt-[25px]">
+          Maak lijstje
+          <template #trailing>&#8594;</template>
+        </UiButton>
       </form>
     </dialog>
 

@@ -5,6 +5,7 @@ import type { DropSide } from "../composables/useDragReorder";
 import type { List } from "../types/app";
 import IconDragHandle from "./icons/IconDragHandle.vue";
 import IconTrash from "./icons/IconTrash.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 
 /**
  * Eén lijstkaart in het overzicht. Ook gebruikt als zwevende kopie tijdens
@@ -71,14 +72,14 @@ const completedText = computed(() => {
       <span>{{ completedText }}</span>
       <span class="card-arrow">&#8594;</span>
     </span>
-    <button
-      class="card-delete"
-      type="button"
-      :aria-label="`Lijst ${list.title} verwijderen`"
+    <UiIconButton
+      variant="ghost-round"
+      class="absolute top-1.5 right-1.5"
+      :label="`Lijst ${list.title} verwijderen`"
       @click.stop="emit('delete')"
       @keydown.stop
     >
-      <IconTrash />
-    </button>
+      <IconTrash class="stroke-[1.6]" />
+    </UiIconButton>
   </article>
 </template>

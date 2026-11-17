@@ -5,6 +5,7 @@ import type { DropSide } from "../composables/useDragReorder";
 import type { ListItem } from "../types/app";
 import IconDragHandle from "./icons/IconDragHandle.vue";
 import IconTrash from "./icons/IconTrash.vue";
+import UiIconButton from "./ui/UiIconButton.vue";
 
 /**
  * Eén item in de detailweergave. De toestand (bewerken, gewapend, slepen)
@@ -61,7 +62,7 @@ watch(
 <template>
   <li
     ref="rowEl"
-    class="item"
+    class="item group"
     :class="{
       completed: item.done,
       dragging,
@@ -104,25 +105,24 @@ watch(
     <span v-else class="item-text" @click="emit('toggle')">{{
       item.text
     }}</span>
-    <button
-      class="edit-button"
-      type="button"
-      aria-label="Item aanpassen"
+    <UiIconButton
+      variant="ghost"
+      reveal
+      label="Item aanpassen"
       @click.stop="emit('start-edit')"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
+      <svg class="stroke-[1.8]" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
       </svg>
-    </button>
-    <button
-      class="item-delete-button"
-      :class="{ 'is-armed': armed }"
-      type="button"
-      :aria-pressed="armed ? 'true' : 'false'"
-      :aria-label="armed ? 'Bevestigen: item verwijderen' : 'Item verwijderen'"
+    </UiIconButton>
+    <UiIconButton
+      variant="ghost"
+      reveal
+      :armed="armed"
+      :label="armed ? 'Bevestigen: item verwijderen' : 'Item verwijderen'"
       @click.stop="emit('delete')"
     >
-      <IconTrash />
-    </button>
+      <IconTrash class="stroke-[1.7]" />
+    </UiIconButton>
   </li>
 </template>

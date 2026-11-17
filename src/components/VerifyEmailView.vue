@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 
 import AuthCard from "./AuthCard.vue";
+import UiButton from "./ui/UiButton.vue";
 import { useAuth } from "../composables/useAuth";
 
 const emit = defineEmits<{ back: [] }>();
@@ -73,9 +74,10 @@ onBeforeUnmount(stopCooldown);
       niets aan? Vraag hieronder een nieuwe link aan.
     </p>
 
-    <button
-      class="button-secondary verify-resend"
-      type="button"
+    <UiButton
+      variant="secondary"
+      block
+      class="mt-[18px]"
       :disabled="busy || cooldown > 0"
       @click="onResend"
     >
@@ -84,16 +86,17 @@ onBeforeUnmount(stopCooldown);
           ? `Opnieuw mogelijk over ${cooldown}s`
           : "Nieuwe verificatielink opvragen"
       }}
-    </button>
+    </UiButton>
 
     <p class="login-message" aria-live="polite">{{ message }}</p>
 
-    <button
-      class="text-button forgot-password"
-      type="button"
+    <UiButton
+      variant="text"
+      size="sm"
+      class="-mt-1 justify-self-start"
       @click="emit('back')"
     >
       Terug naar inloggen
-    </button>
+    </UiButton>
   </AuthCard>
 </template>

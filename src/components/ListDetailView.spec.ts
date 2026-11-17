@@ -7,6 +7,7 @@ import { useLists } from "../composables/useLists";
 import { createList, createListItem, type ListItem } from "../types/app";
 
 const { lists, activeListId, setActiveList } = useLists();
+const CLEAR = '[data-testid="clear-completed"]';
 
 /** Zet één lijst met de gegeven items klaar en opent die als actieve lijst. */
 function seed(items: ListItem[]): void {
@@ -36,7 +37,7 @@ describe("ListDetailView (clear-knop, AGENTS.md §8.6)", () => {
   it("heeft de clear-knop disabled als er niets afgevinkt is (lege lijst)", () => {
     seed([]);
     wrapper = mount(ListDetailView);
-    const clear = wrapper.get(".clear-button");
+    const clear = wrapper.get(CLEAR);
     expect((clear.element as HTMLButtonElement).disabled).toBe(true);
     expect(clear.attributes("aria-pressed")).toBe("false");
   });
@@ -44,15 +45,15 @@ describe("ListDetailView (clear-knop, AGENTS.md §8.6)", () => {
   it("heeft de clear-knop disabled als er items zijn maar geen afgevinkte", () => {
     seed([item("Melk", false), item("Brood", false)]);
     wrapper = mount(ListDetailView);
-    expect(
-      (wrapper.get(".clear-button").element as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((wrapper.get(CLEAR).element as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 
   it("activeert de clear-knop zodra er wél iets afgevinkt is", () => {
     seed([item("Melk", true), item("Brood", false)]);
     wrapper = mount(ListDetailView);
-    const clear = wrapper.get(".clear-button");
+    const clear = wrapper.get(CLEAR);
     expect((clear.element as HTMLButtonElement).disabled).toBe(false);
     expect(clear.text()).toContain("(1)");
   });
@@ -60,11 +61,10 @@ describe("ListDetailView (clear-knop, AGENTS.md §8.6)", () => {
   it("wapent de clear-knop bij de eerste klik (twee-staps, §8.6)", async () => {
     seed([item("Melk", true)]);
     wrapper = mount(ListDetailView);
-    const clear = wrapper.get(".clear-button");
+    const clear = wrapper.get(CLEAR);
 
     await clear.trigger("click");
 
-    expect(clear.classes()).toContain("is-armed");
     expect(clear.attributes("aria-pressed")).toBe("true");
     expect(clear.attributes("aria-label")).toBe(
       "Bevestigen: afgevinkte items verwijderen",
@@ -83,7 +83,7 @@ describe("ListDetailView — Android-terugknop (AGENTS.md §8.13)", () => {
   it("annuleert eerst het bewerken, gaat daarna naar het overzicht", async () => {
     seed([item("Melk", false)]);
     wrapper = mount(ListDetailView);
-    await wrapper.get(".edit-button").trigger("click");
+    await wrapper.get('button[aria-label="Item aanpassen"]').trigger("click");
     expect(wrapper.find("input.item-text").exists()).toBe(true);
 
     expect(handleBack()).toBe(true);
@@ -110,7 +110,7 @@ describe("ListDetailView — item bewerken", () => {
   it("zet de focus in het invoerveld zodra je gaat bewerken", async () => {
     seed([item("Melk", false)]);
     wrapper = mount(ListDetailView, { attachTo: document.body });
-    await wrapper.get(".edit-button").trigger("click");
+    await wrapper.get('button[aria-label="Item aanpassen"]').trigger("click");
     await flushPromises();
     expect(document.activeElement).toBe(wrapper.get("input.item-text").element);
   });
