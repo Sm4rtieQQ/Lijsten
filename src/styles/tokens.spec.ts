@@ -41,11 +41,20 @@ describe("main.css", () => {
     expect(mainCss).toContain('@import "./tokens.css";');
   });
 
+  it("importeert de zelf gehoste fonts", () => {
+    expect(mainCss).toContain('@import "./fonts.css";');
+  });
+
   it("importeert de oude CSS in de laag legacy, nooit zonder laag", () => {
     expect(mainCss).toContain('@import "../styles.css" layer(legacy);');
     const unlayered = [...mainCss.matchAll(/@import\s+"([^"]+)"\s*;/g)]
       .map((match) => match[1])
-      .filter((path) => path !== "tailwindcss" && path !== "./tokens.css");
+      .filter(
+        (path) =>
+          path !== "tailwindcss" &&
+          path !== "./tokens.css" &&
+          path !== "./fonts.css",
+      );
     expect(unlayered).toEqual([]);
   });
 
