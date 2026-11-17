@@ -39,10 +39,17 @@ const activeListId: Ref<string | null> = ref(null);
 const hydrateToken: Ref<number> = ref(0);
 /** De gebruiker van wie de state nu geladen is; `null` = niemand (geen mutaties). */
 let boundUser: string | null = null;
+/**
+ * Telt elke lokale mutatie. Een pull vergelijkt de stand van vóór en na het
+ * request: is er intussen iets gewijzigd, dan gaat de pull niet over de
+ * lokale state heen (ook niet als die wijziging al verstuurd is).
+ */
+let mutationCount = 0;
 
 function enqueue(op: OutboxOpPayload): void {
   const user = boundUser;
   if (!user) return;
+  mutationCount += 1;
   const queue = loadQueue(user, browserStorage);
   queue.push(createOutboxEntry(op));
   saveQueue(user, queue, browserStorage);
@@ -96,16 +103,28 @@ function refreshData(): Promise<void> {
  * De pull-stap van een volledige sync (geregistreerd bij `useSync`).
  * Alleen bij een lege outbox: anders heeft de lokale cache nog
  * ongeverifieerde wijzigingen en blijft de lokale state leidend.
+ *
+ * Dat geldt ook ná het request (AGENTS.md §7.3): staat er dan iets in de
+ * outbox (bv. uit een ander tabblad), of is er tijdens de pull lokaal iets
+ * gewijzigd, dan wordt het antwoord weggegooid. Het antwoord kan van vóór die
+ * wijziging zijn, dus het zou haar van het scherm halen tot de volgende sync.
  */
 async function pullFromServer(): Promise<string | null> {
   const user = boundUser;
   if (!user || !supabase) return null;
   const token = hydrateToken.value;
   if (loadQueue(user, browserStorage).length > 0) return null;
+  const mutationsBefore = mutationCount;
 
   const { data, error } = await pullListsFromServer(user, supabase);
   if (token !== hydrateToken.value) return null; // gebruiker gewisseld
   if (error) return error;
+  if (
+    mutationCount !== mutationsBefore ||
+    loadQueue(user, browserStorage).length > 0
+  ) {
+    return null; // lokale state blijft leidend; de volgende sync haalt in
+  }
   lists.value = data;
   saveLists(user, data, browserStorage);
   // Op een ander apparaat verwijderd → terug naar het overzicht.

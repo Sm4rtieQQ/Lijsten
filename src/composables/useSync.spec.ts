@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NETWORK_ERROR } from "../lib/errorMessages";
 
-const { mockFlushOutbox, mockLoadQueue, mockLoadSyncMeta } = vi.hoisted(() => ({
-  mockFlushOutbox: vi.fn(),
-  mockLoadQueue: vi.fn(),
-  mockLoadSyncMeta: vi.fn(),
-}));
+const { mockFlushOutbox, mockLoadQueue, mockLoadSyncMeta, mockSaveSyncMeta } =
+  vi.hoisted(() => ({
+    mockFlushOutbox: vi.fn(),
+    mockLoadQueue: vi.fn(),
+    mockLoadSyncMeta: vi.fn(),
+    mockSaveSyncMeta: vi.fn(),
+  }));
 
 vi.mock("../lib/sync", () => ({
   flushOutbox: mockFlushOutbox,
@@ -16,9 +18,17 @@ vi.mock("../lib/sync", () => ({
 
 vi.mock("../lib/storage", () => ({
   loadSyncMeta: mockLoadSyncMeta,
-  saveSyncMeta: vi.fn(),
+  saveSyncMeta: mockSaveSyncMeta,
   loadQueue: mockLoadQueue,
   browserStorage: {},
+  queueKey: (userId: string) => `lijstjes:queue:${userId}`,
+  syncMetaKey: (userId: string) => `lijstjes:sync:${userId}`,
+}));
+
+// Het slot over tabbladen heen staat in useSync.multitab.spec.ts; hier geldt
+// één instantie, dus gewoon doorlopen.
+vi.mock("../lib/flushLock", () => ({
+  withFlushLock: (_userId: string, fn: () => Promise<unknown>) => fn(),
 }));
 
 vi.mock("../lib/supabase", () => ({
@@ -340,5 +350,43 @@ describe("useSync — automatische pull hooguit één keer per 30 s (AGENTS.md �
     await syncWithServer();
     await syncNow();
     expect(puller).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("useSync — sync-tijdstip bewaren na een flush (issue #7)", () => {
+  beforeEach(() => {
+    setOnline(true);
+    mockFlushOutbox.mockReset();
+    mockLoadQueue.mockReset();
+    mockLoadSyncMeta.mockReset();
+    mockSaveSyncMeta.mockReset();
+    mockLoadQueue.mockReturnValue([]);
+    mockLoadSyncMeta.mockReturnValue({ lastSyncedAt: null });
+    mockFlushOutbox.mockResolvedValue({ ok: true, queue: [], error: null });
+    bindSyncUser("user-1");
+  });
+
+  afterEach(() => {
+    bindSyncUser(null);
+  });
+
+  it("bewaart het tijdstip van een geslaagde flush voor andere tabbladen", async () => {
+    await expect(flushNow()).resolves.toBe(true);
+    expect(mockSaveSyncMeta).toHaveBeenCalledWith(
+      "user-1",
+      { lastSyncedAt: lastSyncedAt.value, lastError: null },
+      expect.anything(),
+    );
+  });
+
+  it("een volle opslag maakt een geslaagde flush niet tot een fout", async () => {
+    mockSaveSyncMeta.mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+
+    await expect(flushNow()).resolves.toBe(true);
+    expect(status.value).toBe("synced");
+    expect(lastError.value).toBeNull();
+    expect(mockFlushOutbox).toHaveBeenCalledTimes(1);
   });
 });

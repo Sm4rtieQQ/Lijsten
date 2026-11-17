@@ -2,12 +2,15 @@ import { ref, type Ref } from "vue";
 
 import { nextRetryAttempt } from "../lib/outbox";
 import { flushOutbox, backoffMs } from "../lib/sync";
+import { withFlushLock } from "../lib/flushLock";
 import { toUserFacingError, NETWORK_ERROR } from "../lib/errorMessages";
 import {
   loadSyncMeta,
   saveSyncMeta,
   loadQueue,
   browserStorage,
+  queueKey,
+  syncMetaKey,
 } from "../lib/storage";
 import { supabase } from "../lib/supabase";
 import { hasFailed } from "../types/sync";
@@ -94,6 +97,31 @@ function registerConnectivityListeners(): void {
   });
 }
 registerConnectivityListeners();
+
+let storageListenerRegistered = false;
+
+/**
+ * Andere tabbladen/instanties delen de outbox (§7.3). Het `storage`-event komt
+ * alleen in de *andere* tabbladen binnen: verstuurt of wijzigt tabblad A de
+ * wachtrij, dan volgen de wachtrijlengte en de pill in tabblad B meteen.
+ */
+function registerStorageListener(): void {
+  if (typeof window === "undefined" || storageListenerRegistered) return;
+  storageListenerRegistered = true;
+  window.addEventListener("storage", (event: StorageEvent) => {
+    const userId = boundUser;
+    if (!userId) return;
+    // `key === null`: localStorage.clear() in een ander tabblad.
+    if (event.key === null || event.key === queueKey(userId)) {
+      refreshStatus();
+    }
+    if (event.key === null || event.key === syncMetaKey(userId)) {
+      const meta = loadSyncMeta(userId, browserStorage);
+      if (meta.lastSyncedAt) lastSyncedAt.value = meta.lastSyncedAt;
+    }
+  });
+}
+registerStorageListener();
 
 /** Registreert de pull van `useLists` (eenmalig, bij het laden van die module). */
 export function registerPuller(fn: Puller | null): void {
@@ -218,14 +246,28 @@ export function syncWithServerIfStale(): Promise<void> {
 /**
  * Pusht de outbox. Loopt er al een flush, dan wacht de aanroeper op díe flush
  * (geen tweede tegelijk). `true` = de outbox is nu leeg en er is verbinding.
+ *
+ * Over tabbladen heen verstuurt er ook maar één tegelijk (`withFlushLock`):
+ * een tweede tabblad wacht op het slot en leest de wachtrij daarna opnieuw
+ * (`flushOutbox` laadt hem zelf), dus een al verstuurde operatie gaat niet
+ * nog eens.
  */
 function runFlush(): Promise<boolean> {
   if (!flushInFlight) {
-    flushInFlight = doFlush().finally(() => {
+    flushInFlight = lockedFlush().finally(() => {
       flushInFlight = null;
     });
   }
   return flushInFlight;
+}
+
+function lockedFlush(): Promise<boolean> {
+  const userId = boundUser;
+  if (!userId || !supabase) return Promise.resolve(false);
+  return withFlushLock(userId, () =>
+    // Gebruiker gewisseld terwijl we op het slot wachtten: niets versturen.
+    boundUser === userId ? doFlush() : Promise.resolve(false),
+  );
 }
 
 async function doFlush(): Promise<boolean> {
@@ -258,6 +300,18 @@ async function doFlush(): Promise<boolean> {
     lastError.value = result.error ?? pullError;
     if (result.ok) {
       lastSyncedAt.value = new Date().toISOString();
+      // Bewaren, zodat andere tabbladen het tijdstip via `storage` volgen.
+      // Best effort: een volle of geblokkeerde opslag maakt een geslaagde
+      // flush niet alsnog tot een fout (en start geen retry-lus).
+      try {
+        saveSyncMeta(
+          userId,
+          { lastSyncedAt: lastSyncedAt.value, lastError: null },
+          browserStorage,
+        );
+      } catch {
+        // Alleen het tijdstip in andere tabbladen loopt dan achter.
+      }
     }
     // refreshStatus() leidt de status af uit de outbox; de fout zit erin
     // gemarkeerd, dus bij niet-ok wordt dit "error".
