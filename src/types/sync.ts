@@ -6,7 +6,9 @@ import type { ListItem } from "./app";
  * De server wordt UITSLUITEND geschreven vanuit deze outbox, in FIFO-volgorde.
  * Deze types zijn ook de basis voor de sync-status: een entry met
  * `attempts > 0` of `lastError` is gefaald en wordt met backoff opnieuw
- * geprobeerd. Zie `src/lib/sync.ts`.
+ * geprobeerd. Een entry met `parkedAt` is geparkeerd (#10): de server weigerde
+ * hem blijvend; hij blijft bewaard maar houdt de rest niet meer op. Zie
+ * `src/lib/sync.ts`.
  */
 export type OutboxEntry =
   | CreateListOp
@@ -24,6 +26,23 @@ interface OutboxEntryBase {
   createdAt: string;
   attempts: number;
   lastError: string | null;
+  /**
+   * Postgres/PostgREST-foutcode van de laatste mislukte poging (bv. `23503`),
+   * alleen voor diagnose; nooit tonen (§7.5). Ontbreekt in oudere wachtrijen.
+   */
+  lastCode?: string | null;
+  /**
+   * Zoveel keer op rij weigerde de server deze operatie blijvend (#10); een
+   * tijdelijke fout zet hem terug op 0. Bij `PARK_AFTER_ATTEMPTS` wordt hij
+   * geparkeerd. Ontbreekt in oudere wachtrijen (= 0).
+   */
+  rejections?: number;
+  /**
+   * ISO-tijdstip waarop de operatie geparkeerd werd (#10): de server weigerde
+   * hem blijvend. Hij blijft bewaard, gaat niet meer automatisch opnieuw en
+   * houdt de rest van de wachtrij niet op. Ontbreekt = niet geparkeerd.
+   */
+  parkedAt?: string;
 }
 
 export interface CreateListOp extends OutboxEntryBase {
@@ -89,6 +108,11 @@ export function hasFailed(entry: OutboxEntry): boolean {
   return entry.attempts > 0 || entry.lastError !== null;
 }
 
+/** Is deze operatie geparkeerd (blijvend geweigerd, #10)? */
+export function isParked(entry: OutboxEntry): boolean {
+  return typeof entry.parkedAt === "string";
+}
+
 export function isOutboxEntry(value: unknown): value is OutboxEntry {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -97,6 +121,11 @@ export function isOutboxEntry(value: unknown): value is OutboxEntry {
     typeof v.createdAt === "string" &&
     typeof v.attempts === "number" &&
     (typeof v.lastError === "string" || v.lastError === null) &&
+    (v.lastCode === undefined ||
+      v.lastCode === null ||
+      typeof v.lastCode === "string") &&
+    (v.rejections === undefined || typeof v.rejections === "number") &&
+    (v.parkedAt === undefined || typeof v.parkedAt === "string") &&
     typeof v.type === "string"
   );
 }

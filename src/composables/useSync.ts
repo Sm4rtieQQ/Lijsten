@@ -32,7 +32,8 @@ export type Puller = () => Promise<string | null>;
  * - `pending`:  outbox heeft openstaande (niet gefaalde) operaties.
  * - `syncing`:  een flush of pull draait op dit moment.
  * - `error`:    een operatie of de pull is mislukt (de outbox wordt met
- *               backoff herhaald; de pull bij de volgende sync).
+ *               backoff herhaald; de pull bij de volgende sync), of er staan
+ *               geparkeerde operaties in de outbox (#10).
  *
  * Er zijn twee soorten synchroniseren:
  * - `runFlush`: alleen de outbox pushen. Automatisch na elke mutatie en bij
@@ -65,6 +66,8 @@ let pulling = false;
 /** Fout van de laatste pull; houdt de pill rood tot de volgende sync. */
 let pullError: string | null = null;
 let flushInFlight: Promise<boolean> | null = null;
+/** Probeert de lopende flush ook de geparkeerde operaties opnieuw (#10)? */
+let flushInFlightRetriesParked = false;
 let syncInFlight: Promise<void> | null = null;
 let puller: Puller | null = null;
 /** Navigatie is als offline bekend (`navigator.onLine === false`): status forceren
@@ -224,7 +227,9 @@ export async function flushBeforeSignOut(): Promise<boolean> {
   const userId = boundUser;
   if (!userId) return true;
   if (loadQueue(userId, browserStorage).length === 0) return true;
-  await runFlush();
+  // Laatste kans: ook de geparkeerde operaties nog één keer (#10). Blijven ze
+  // geparkeerd, dan tellen ze als niet-verstuurde wijzigingen.
+  await runFlush(true);
   return loadQueue(userId, browserStorage).length === 0;
 }
 
@@ -251,26 +256,33 @@ export function syncWithServerIfStale(): Promise<void> {
  * een tweede tabblad wacht op het slot en leest de wachtrij daarna opnieuw
  * (`flushOutbox` laadt hem zelf), dus een al verstuurde operatie gaat niet
  * nog eens.
+ *
+ * `retryParked` (#10): ook de geparkeerde operaties opnieuw proberen. Loopt
+ * er al een flush zonder, dan volgt er daarna nog één mét.
  */
-function runFlush(): Promise<boolean> {
-  if (!flushInFlight) {
-    flushInFlight = lockedFlush().finally(() => {
-      flushInFlight = null;
-    });
+function runFlush(retryParked = false): Promise<boolean> {
+  if (flushInFlight) {
+    if (!retryParked || flushInFlightRetriesParked) return flushInFlight;
+    return flushInFlight.then(() => runFlush(true));
   }
+  flushInFlightRetriesParked = retryParked;
+  flushInFlight = lockedFlush(retryParked).finally(() => {
+    flushInFlight = null;
+    flushInFlightRetriesParked = false;
+  });
   return flushInFlight;
 }
 
-function lockedFlush(): Promise<boolean> {
+function lockedFlush(retryParked: boolean): Promise<boolean> {
   const userId = boundUser;
   if (!userId || !supabase) return Promise.resolve(false);
   return withFlushLock(userId, () =>
     // Gebruiker gewisseld terwijl we op het slot wachtten: niets versturen.
-    boundUser === userId ? doFlush() : Promise.resolve(false),
+    boundUser === userId ? doFlush(retryParked) : Promise.resolve(false),
   );
 }
 
-async function doFlush(): Promise<boolean> {
+async function doFlush(retryParked: boolean): Promise<boolean> {
   if (!boundUser || !supabase) return false;
   // Deze flush neemt alles mee wat nu in de outbox staat; een geplande
   // verzending is dan overbodig. Wijzigingen tijdens de flush plannen opnieuw.
@@ -294,11 +306,15 @@ async function doFlush(): Promise<boolean> {
   // NL-fout + error-status, en `flushing` komt in `finally` altijd vrij — de
   // status blijft nooit hangen op `syncing`.
   try {
-    const result = await flushOutbox(userId, supabase, browserStorage);
+    const result = await flushOutbox(userId, supabase, browserStorage, {
+      retryParked,
+    });
 
     queueLength.value = result.queue.length;
     lastError.value = result.error ?? pullError;
-    if (result.ok) {
+    // Geparkeerde operaties over (#10): geen schone sync, het tijdstip en de
+    // fout in de sync-meta (gezet door `flushOutbox`) blijven staan.
+    if (result.ok && !result.parkedCount) {
       lastSyncedAt.value = new Date().toISOString();
       // Bewaren, zodat andere tabbladen het tijdstip via `storage` volgen.
       // Best effort: een volle of geblokkeerde opslag maakt een geslaagde
@@ -318,9 +334,13 @@ async function doFlush(): Promise<boolean> {
     refreshStatus();
 
     if (!result.ok) {
-      // retry met backoff op basis van de hoogste attempt-teller
+      // retry met backoff op basis van de hoogste attempt-teller. Alleen
+      // geparkeerde operaties over (ok): geen retry-lus, die gaan pas bij de
+      // volgende volledige sync opnieuw (#10).
       scheduleRetry(nextRetryAttempt(result.queue));
     }
+    // Niet leeg (ook door geparkeerde operaties) → geen pull: de lokale state
+    // blijft leidend (§7.4).
     return result.ok && result.queue.length === 0;
   } catch (err) {
     // Onverwerkte fout (vangnet): status op error, leesbare tekst, retry.
@@ -360,7 +380,8 @@ async function doSync(): Promise<void> {
   lastFullSyncStartedAt = Date.now();
   pullError = null;
 
-  const flushed = await runFlush();
+  // Een volledige sync probeert ook de geparkeerde operaties opnieuw (#10).
+  const flushed = await runFlush(true);
   if (!flushed || !puller || boundUser !== userId) {
     refreshStatus();
     return;
@@ -395,7 +416,10 @@ export function useSync() {
     lastSyncedAt,
     lastError,
     queueLength,
-    /** De pill: volledige sync (ook voor retry van gefaalde operaties). */
+    /**
+     * De pill: volledige sync (ook voor retry van gefaalde en geparkeerde
+     * operaties, #10).
+     */
     syncNow: syncWithServer,
     markDirty,
   };

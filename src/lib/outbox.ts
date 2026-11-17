@@ -1,5 +1,6 @@
 import {
   hasFailed,
+  isParked,
   type OutboxEntry,
   type OutboxOpPayload,
 } from "../types/sync";
@@ -112,8 +113,12 @@ const TRANSIENT_ERRORS: ReadonlySet<string> = new Set([
   CONNECTION_DROPPED,
 ]);
 
-/** Nog nooit geprobeerd, of alleen mislukt door de verbinding. */
+/**
+ * Nog nooit geprobeerd, of alleen mislukt door de verbinding. Een geparkeerde
+ * operatie (#10) gaat altijd alleen.
+ */
 function isBatchable(entry: OutboxEntry): boolean {
+  if (isParked(entry)) return false;
   return (
     !hasFailed(entry) ||
     (entry.lastError !== null && TRANSIENT_ERRORS.has(entry.lastError))
@@ -193,7 +198,107 @@ export function pruneQueueForList(
   return queue.filter((entry) => !touchesList(entry, listId));
 }
 
-/** Volgende poging voor de backoff: één hoger dan de hoogste `attempts`. */
+/**
+ * Volgende poging voor de backoff: één hoger dan de hoogste `attempts`.
+ * Geparkeerde operaties tellen niet mee: die gaan niet automatisch opnieuw.
+ */
 export function nextRetryAttempt(queue: readonly OutboxEntry[]): number {
-  return Math.max(0, ...queue.map((entry) => entry.attempts)) + 1;
+  const active = queue.filter((entry) => !isParked(entry));
+  return Math.max(0, ...active.map((entry) => entry.attempts)) + 1;
+}
+
+/**
+ * Na zoveel blijvende weigeringen **op rij** (`rejections`, tijdelijke fouten
+ * tellen niet en zetten de telling terug) wordt een operatie geparkeerd (#10,
+ * §7.3). Niet meteen bij de eerste weigering: dan kan een toevallige race
+ * (bv. met een net verwijderde lijst op een ander apparaat) zich nog oplossen.
+ */
+export const PARK_AFTER_ATTEMPTS = 3;
+
+/**
+ * Weigert de server deze operatie zelf (permanent), of lag het aan de
+ * verbinding/de server (tijdelijk)? Alleen een permanente fout mag tot
+ * parkeren leiden (#10).
+ *
+ * - Permanent: Postgres-klassen `22` (ongeldige data), `23` (integriteit, bv.
+ *   `23503` FK, `23505` andere constraint), `42` (bv. `42501` RLS) en `P0`
+ *   (fout uit een databasefunctie); PostgREST `PGRST1xx`/`PGRST2xx` (het
+ *   verzoek klopt niet, 4xx).
+ * - Tijdelijk: geen code (netwerk, timeout), PostgREST `PGRST0xx` (geen
+ *   verbinding met de database) en `PGRST3xx` (JWT verlopen: na het verversen
+ *   van de sessie lukt het weer), en alles wat we niet kennen.
+ */
+export function isPermanentError(code: string | null | undefined): boolean {
+  if (!code) return false;
+  if (code.startsWith("PGRST")) {
+    const group = code.charAt(5);
+    return group === "1" || group === "2";
+  }
+  return ["22", "23", "42", "P0"].includes(code.slice(0, 2));
+}
+
+/**
+ * Sleutels waarop een geparkeerde (of wachtende) operatie de operaties ná hem
+ * laat wachten: het item of de lijst die hij schrijft, of de volgorde die hij
+ * zet. Een item-operatie blokkeert alleen dat item, niet de hele lijst.
+ */
+export function blockKeys(entry: OutboxEntry): string[] {
+  switch (entry.type) {
+    case "item.create":
+    case "item.update":
+      return [`item:${entry.item.id}`];
+    case "item.delete":
+      return [`item:${entry.itemId}`];
+    case "item.reorder":
+      return [`order:${entry.listId}`];
+    case "list.reorder":
+      return ["order:lists"];
+    default:
+      return [`list:${entry.listId}`];
+  }
+}
+
+/** Sleutels waarvan deze operatie afhangt (zie `blockKeys`). */
+function dependsOn(entry: OutboxEntry): string[] {
+  switch (entry.type) {
+    case "item.create":
+    case "item.update":
+      return [`item:${entry.item.id}`, `list:${entry.item.listId}`];
+    case "item.delete":
+      return [`item:${entry.itemId}`, `list:${entry.listId}`];
+    case "item.reorder":
+      return [
+        `order:${entry.listId}`,
+        `list:${entry.listId}`,
+        ...entry.itemIds.map((id) => `item:${id}`),
+      ];
+    case "list.reorder":
+      return ["order:lists", ...entry.listIds.map((id) => `list:${id}`)];
+    default:
+      return [`list:${entry.listId}`];
+  }
+}
+
+/**
+ * De operaties uit `pending` die nu verstuurd mogen worden (#10), in
+ * FIFO-volgorde. Een operatie die afhangt van een geblokkeerde sleutel (een
+ * geparkeerde operatie op hetzelfde item, een geparkeerde lijst-operatie, …)
+ * wacht, en laat op haar beurt wat van háár afhangt ook wachten. Wachten is
+ * niet opgeslagen: lukt de geparkeerde operatie later, dan gaan ze vanzelf
+ * mee. Puur: `blocked` wordt niet gewijzigd.
+ */
+export function readyEntries(
+  pending: readonly OutboxEntry[],
+  blocked: ReadonlySet<string>,
+): OutboxEntry[] {
+  const held = new Set(blocked);
+  const ready: OutboxEntry[] = [];
+  for (const entry of pending) {
+    if (dependsOn(entry).some((key) => held.has(key))) {
+      for (const key of blockKeys(entry)) held.add(key);
+    } else {
+      ready.push(entry);
+    }
+  }
+  return ready;
 }
