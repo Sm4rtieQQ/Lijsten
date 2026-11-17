@@ -996,6 +996,31 @@ async function testIdempotentCreates(): Promise<void> {
     retried.ok && loadQueue("userA", mem2).length === 0,
     "retry van een al aangekomen create slaagt, wachtrij leeg",
   );
+
+  // App gekild na de commit: de rijen staan op de server, de wachtrij is nooit
+  // gemarkeerd (attempts 0). Zelfs een server die 23505 geeft laat de verse
+  // create niet vastlopen.
+  const mem3 = memoryStorage();
+  const committed = makeFauxClient({
+    errorFor: (call) =>
+      rowsOf(call).some((r) => r.id === "K1")
+        ? pkeyDuplicate(call.table)
+        : null,
+  });
+  saveQueue(
+    "userA",
+    [entry({ type: "item.create", item: item("K1", "L1", "a") })],
+    mem3,
+  );
+  assert(
+    loadQueue("userA", mem3)[0]?.attempts === 0,
+    "verse create is nooit gemarkeerd (app gekild na de commit)",
+  );
+  const afterKill = await flushOutbox("userA", client(committed.backend), mem3);
+  assert(
+    afterKill.ok && loadQueue("userA", mem3).length === 0,
+    "verse create voor een al vastgelegde rij slaagt, wachtrij leeg",
+  );
 }
 
 async function testDuplicateKeyCountsAsDone(): Promise<void> {
