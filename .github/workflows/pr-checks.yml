@@ -1,0 +1,33 @@
+name: PR-controles
+
+on:
+  pull_request:
+    branches: [master]
+
+# Alleen lezen; deze workflow gebruikt bewust geen secrets (PR's vanaf forks krijgen ze niet).
+permissions:
+  contents: read
+
+# Een nieuwe push naar dezelfde PR annuleert de lopende run.
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run format:check
+      # Zonder VITE_SUPABASE_*: de build slaagt en de app toont dan de "niet geconfigureerd"-melding.
+      - run: npm run build
+      - run: npm run verify:data
