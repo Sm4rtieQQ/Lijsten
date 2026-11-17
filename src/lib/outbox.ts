@@ -208,10 +208,10 @@ export function nextRetryAttempt(queue: readonly OutboxEntry[]): number {
 }
 
 /**
- * Na zoveel pogingen wordt een operatie die de server **blijvend** weigert
- * geparkeerd (#10, §7.3). Niet meteen bij de eerste weigering: dan kan een
- * toevallige race (bv. met een net verwijderde lijst op een ander apparaat)
- * zich nog oplossen.
+ * Na zoveel blijvende weigeringen **op rij** (`rejections`, tijdelijke fouten
+ * tellen niet en zetten de telling terug) wordt een operatie geparkeerd (#10,
+ * §7.3). Niet meteen bij de eerste weigering: dan kan een toevallige race
+ * (bv. met een net verwijderde lijst op een ander apparaat) zich nog oplossen.
  */
 export const PARK_AFTER_ATTEMPTS = 3;
 

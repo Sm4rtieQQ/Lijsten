@@ -11,7 +11,13 @@ import {
   nextRetryAttempt,
   readyEntries,
 } from "./outbox";
-import { loadQueue, saveQueue, type StorageBackend } from "./storage";
+import {
+  loadQueue,
+  loadSyncMeta,
+  saveQueue,
+  saveSyncMeta,
+  type StorageBackend,
+} from "./storage";
 import { flushOutbox } from "./sync";
 import type { ListItem } from "../types/app";
 import {
@@ -126,6 +132,7 @@ const RLS: PgError = {
 const almostParked = (e: OutboxEntry): OutboxEntry => ({
   ...e,
   attempts: PARK_AFTER_ATTEMPTS - 1,
+  rejections: PARK_AFTER_ATTEMPTS - 1,
   lastError: ACCESS_DENIED,
 });
 
@@ -184,8 +191,10 @@ describe("flushOutbox — permanente fouten parkeren (#10)", () => {
     const mem = memoryStorage();
     saveQueue(USER, [createItem("I1"), createItem("I2")], mem);
 
-    // Eerst nog gewoon gemarkeerd (FIFO, backoff) zoals altijd.
-    for (let i = 1; i < PARK_AFTER_ATTEMPTS; i += 1) {
+    // Eerst nog gewoon gemarkeerd (FIFO, backoff) zoals altijd. De eerste run
+    // is een bundel van twee: die weigering telt niet (schuldige onbekend),
+    // daarna gaat I1 alleen.
+    for (let i = 0; i < PARK_AFTER_ATTEMPTS; i += 1) {
       const run = await flushOutbox(USER, server.client, mem);
       expect(run.ok).toBe(false);
       expect(loadQueue(USER, mem).some(isParked)).toBe(false);
@@ -197,7 +206,8 @@ describe("flushOutbox — permanente fouten parkeren (#10)", () => {
     const left = loadQueue(USER, mem);
     expect(left.map(idOf)).toEqual(["I1"]);
     expect(left[0]).toMatchObject({
-      attempts: PARK_AFTER_ATTEMPTS,
+      attempts: PARK_AFTER_ATTEMPTS + 1,
+      rejections: PARK_AFTER_ATTEMPTS,
       lastCode: "23503",
     });
     expect(isParked(left[0]!)).toBe(true);
@@ -368,6 +378,87 @@ describe("flushOutbox — permanente fouten parkeren (#10)", () => {
 
     expect(result).toMatchObject({ ok: true, queuedCount: 0 });
     expect(server.sent.map((s) => s.table)).toEqual(["lists", "list_items"]);
+  });
+
+  it("alleen blijvende weigeringen tellen: na netwerkfouten parkeert één weigering nog niet", async () => {
+    const server = fakeClient((s) => (s.ids.includes("I1") ? FK : null));
+    const mem = memoryStorage();
+    saveQueue(
+      USER,
+      [
+        {
+          ...createItem("I1"),
+          attempts: PARK_AFTER_ATTEMPTS - 1,
+          lastError: CONNECTION_DROPPED,
+        },
+      ],
+      mem,
+    );
+
+    const first = await flushOutbox(USER, server.client, mem);
+    expect(first.ok).toBe(false);
+    expect(loadQueue(USER, mem)[0]).toMatchObject({ rejections: 1 });
+    expect(isParked(loadQueue(USER, mem)[0]!)).toBe(false);
+
+    for (let i = 1; i < PARK_AFTER_ATTEMPTS; i += 1) {
+      await flushOutbox(USER, server.client, mem);
+    }
+    expect(isParked(loadQueue(USER, mem)[0]!)).toBe(true);
+  });
+
+  it("een tijdelijke fout tussendoor zet de telling van weigeringen terug", async () => {
+    let call = 0;
+    const server = fakeClient(() => {
+      call += 1;
+      return call === 2 ? { code: "PGRST000", message: "no connection" } : FK;
+    });
+    const mem = memoryStorage();
+    saveQueue(USER, [createItem("I1")], mem);
+
+    for (let i = 0; i < PARK_AFTER_ATTEMPTS; i += 1) {
+      await flushOutbox(USER, server.client, mem);
+    }
+
+    // FK, netwerk, FK: nog maar één weigering op rij.
+    const [left] = loadQueue(USER, mem);
+    expect(left).toMatchObject({ rejections: 1 });
+    expect(isParked(left!)).toBe(false);
+  });
+
+  it("een tijdelijke fout bij het opnieuw proberen laat de oorspronkelijke reden staan", async () => {
+    const server = fakeClient(() => ({
+      code: "PGRST000",
+      message: "no connection",
+    }));
+    const mem = memoryStorage();
+    saveQueue(USER, [parked(createItem("I1"))], mem);
+
+    await flushOutbox(USER, server.client, mem, { retryParked: true });
+
+    expect(loadQueue(USER, mem)[0]).toMatchObject({
+      attempts: PARK_AFTER_ATTEMPTS + 1,
+      lastError: ACCESS_DENIED,
+      lastCode: "42501",
+    });
+  });
+
+  it("blijven er geparkeerde operaties over, dan meldt de run geen schone sync", async () => {
+    const server = fakeClient();
+    const mem = memoryStorage();
+    saveSyncMeta(
+      USER,
+      { lastSyncedAt: "2026-11-16T08:00:00.000Z", lastError: null },
+      mem,
+    );
+    saveQueue(USER, [parked(createItem("I1")), createItem("I2")], mem);
+
+    const result = await flushOutbox(USER, server.client, mem);
+
+    expect(result).toMatchObject({ ok: true, error: ACCESS_DENIED });
+    expect(loadSyncMeta(USER, mem)).toEqual({
+      lastSyncedAt: "2026-11-16T08:00:00.000Z",
+      lastError: ACCESS_DENIED,
+    });
   });
 
   it("een gewone (niet-parkeerbare) fout stopt de run nog steeds (FIFO)", async () => {

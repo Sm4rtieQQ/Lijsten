@@ -122,10 +122,13 @@ export async function flushOutbox(
 
   /**
    * Markeert `failed` (`attempts+1`, `lastError`, `lastCode`). Een operatie
-   * die **alleen** verstuurd werd en blijvend geweigerd is, wordt na
-   * `PARK_AFTER_ATTEMPTS` pogingen geparkeerd; een al geparkeerde blijft
-   * geparkeerd. Geeft `true` als de run moet stoppen (FIFO): er is een
-   * gewone, niet-geparkeerde fout.
+   * die **alleen** verstuurd werd en blijvend geweigerd is, telt een
+   * weigering (`rejections`); een tijdelijke fout zet die telling terug. Bij
+   * `PARK_AFTER_ATTEMPTS` weigeringen op rij wordt hij geparkeerd. Een al
+   * geparkeerde blijft geparkeerd; faalt hij alleen door de verbinding, dan
+   * blijft de oorspronkelijke reden (`lastError`/`lastCode`) staan voor
+   * diagnose. Geeft `true` als de run moet stoppen (FIFO): er is een gewone,
+   * niet-geparkeerde fout.
    */
   const markFailed = (
     failed: readonly OutboxEntry[],
@@ -133,17 +136,24 @@ export async function flushOutbox(
   ): boolean => {
     const lastError = result.error ?? "Onbekende synchronisatiefout";
     // Uit een mislukte bundel is de schuldige rij niet bekend: nooit parkeren.
-    const permanent = failed.length === 1 && isPermanentError(result.code);
+    const single = failed.length === 1;
+    const permanent = isPermanentError(result.code);
     let stop = false;
     for (const entry of failed) {
-      const attempts = entry.attempts + 1;
+      const rejections = !permanent
+        ? 0
+        : single
+          ? (entry.rejections ?? 0) + 1
+          : (entry.rejections ?? 0);
       const park =
-        isParked(entry) || (permanent && attempts >= PARK_AFTER_ATTEMPTS);
+        isParked(entry) || (single && rejections >= PARK_AFTER_ATTEMPTS);
+      const keepReason = isParked(entry) && !permanent;
       const next: OutboxEntry = {
         ...entry,
-        attempts,
-        lastError,
-        lastCode: result.code,
+        attempts: entry.attempts + 1,
+        rejections,
+        lastError: keepReason ? entry.lastError : lastError,
+        lastCode: keepReason ? (entry.lastCode ?? null) : result.code,
       };
       if (park) next.parkedAt = entry.parkedAt ?? new Date().toISOString();
       updated.set(entry.opId, next);
@@ -153,9 +163,21 @@ export async function flushOutbox(
     return stop;
   };
 
-  /** Bewaart de wachtrij en de sync-meta en geeft het resultaat van de run. */
-  const finish = (error: string | null): FlushResult => {
+  /**
+   * Bewaart de wachtrij en de sync-meta en geeft het resultaat van de run.
+   * `failure` = de fout die de run stopte. Blijven er geparkeerde operaties
+   * over, dan is de run wel `ok` (niets houdt de rest op), maar geen schone
+   * sync: de reden van de eerste geparkeerde wordt de fout en het tijdstip
+   * van de laatste sync blijft staan.
+   */
+  const finish = (failure: string | null): FlushResult => {
     const nextQueue = settle();
+    const parked = nextQueue.filter(isParked);
+    const error =
+      failure ??
+      (parked.length > 0
+        ? (parked[0]!.lastError ?? "Onbekende synchronisatiefout")
+        : null);
     saveSyncMeta(
       userId,
       error === null
@@ -167,13 +189,13 @@ export async function flushOutbox(
       backend,
     );
     return {
-      ok: error === null,
+      ok: failure === null,
       error,
       syncedCount,
       // Meestal leeg; niet leeg als er iets geparkeerd is, iets wacht, of er
       // tijdens het versturen iets is gewijzigd (gaat met de volgende run mee).
       queuedCount: nextQueue.length,
-      parkedCount: nextQueue.filter(isParked).length,
+      parkedCount: parked.length,
       queue: nextQueue,
     };
   };

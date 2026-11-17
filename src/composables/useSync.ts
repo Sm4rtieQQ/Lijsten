@@ -312,7 +312,9 @@ async function doFlush(retryParked: boolean): Promise<boolean> {
 
     queueLength.value = result.queue.length;
     lastError.value = result.error ?? pullError;
-    if (result.ok) {
+    // Geparkeerde operaties over (#10): geen schone sync, het tijdstip en de
+    // fout in de sync-meta (gezet door `flushOutbox`) blijven staan.
+    if (result.ok && !result.parkedCount) {
       lastSyncedAt.value = new Date().toISOString();
       // Bewaren, zodat andere tabbladen het tijdstip via `storage` volgen.
       // Best effort: een volle of geblokkeerde opslag maakt een geslaagde

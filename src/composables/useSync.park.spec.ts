@@ -8,9 +8,10 @@ import type { OutboxEntry } from "../types/sync";
  * het uitloggen proberen ze opnieuw, en de pull blijft uit zolang ze er zijn.
  */
 
-const { mockFlushOutbox, mockLoadQueue } = vi.hoisted(() => ({
+const { mockFlushOutbox, mockLoadQueue, mockSaveSyncMeta } = vi.hoisted(() => ({
   mockFlushOutbox: vi.fn(),
   mockLoadQueue: vi.fn(),
+  mockSaveSyncMeta: vi.fn(),
 }));
 
 vi.mock("../lib/sync", () => ({
@@ -20,7 +21,7 @@ vi.mock("../lib/sync", () => ({
 
 vi.mock("../lib/storage", () => ({
   loadSyncMeta: () => ({ lastSyncedAt: null, lastError: null }),
-  saveSyncMeta: vi.fn(),
+  saveSyncMeta: mockSaveSyncMeta,
   loadQueue: mockLoadQueue,
   browserStorage: {},
   queueKey: (userId: string) => `lijstjes:queue:${userId}`,
@@ -61,7 +62,7 @@ const parkedEntry: OutboxEntry = {
 /** Een run die alles verstuurde, maar waarbij de geparkeerde blijft staan. */
 const parkedResult = {
   ok: true,
-  error: null,
+  error: "Geen toegang tot deze gegevens.",
   syncedCount: 0,
   queuedCount: 1,
   parkedCount: 1,
@@ -82,6 +83,7 @@ describe("useSync — geparkeerde operaties (#10)", () => {
     });
     mockFlushOutbox.mockReset();
     mockLoadQueue.mockReset();
+    mockSaveSyncMeta.mockReset();
     puller.mockReset();
     puller.mockResolvedValue(null);
     registerPuller(puller);
@@ -117,6 +119,17 @@ describe("useSync — geparkeerde operaties (#10)", () => {
     await syncWithServer();
 
     expect(optionsOf(0)).toEqual({ retryParked: true });
+  });
+
+  it("met geparkeerde operaties wordt het sync-tijdstip niet bijgewerkt", async () => {
+    bindSyncUser("user-1");
+    const { lastSyncedAt } = useSync();
+    const before = lastSyncedAt.value;
+
+    await flushNow();
+
+    expect(lastSyncedAt.value).toBe(before);
+    expect(mockSaveSyncMeta).not.toHaveBeenCalled();
   });
 
   it("de pull blijft uit zolang er geparkeerde operaties zijn (lokale state blijft leidend)", async () => {

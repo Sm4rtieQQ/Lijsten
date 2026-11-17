@@ -32,6 +32,12 @@ interface OutboxEntryBase {
    */
   lastCode?: string | null;
   /**
+   * Zoveel keer op rij weigerde de server deze operatie blijvend (#10); een
+   * tijdelijke fout zet hem terug op 0. Bij `PARK_AFTER_ATTEMPTS` wordt hij
+   * geparkeerd. Ontbreekt in oudere wachtrijen (= 0).
+   */
+  rejections?: number;
+  /**
    * ISO-tijdstip waarop de operatie geparkeerd werd (#10): de server weigerde
    * hem blijvend. Hij blijft bewaard, gaat niet meer automatisch opnieuw en
    * houdt de rest van de wachtrij niet op. Ontbreekt = niet geparkeerd.
@@ -118,6 +124,7 @@ export function isOutboxEntry(value: unknown): value is OutboxEntry {
     (v.lastCode === undefined ||
       v.lastCode === null ||
       typeof v.lastCode === "string") &&
+    (v.rejections === undefined || typeof v.rejections === "number") &&
     (v.parkedAt === undefined || typeof v.parkedAt === "string") &&
     typeof v.type === "string"
   );
