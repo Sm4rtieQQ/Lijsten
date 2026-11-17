@@ -19,7 +19,7 @@
 | Backend/Auth/DB | [Supabase](https://supabase.com/) (Auth + Postgres + Row Level Security)                  |
 | Auth            | **Open registratie met e-mailverificatie** — bevestiging verplicht vóór toegang (§7.6)    |
 | Mobile          | [Capacitor](https://capacitorjs.com/) Android                                             |
-| Stijl           | Gewone CSS (behoud bestaande `styles.css`-stijl en kleurpalet)                            |
+| Stijl           | Tailwind CSS v4, migratie loopt (§9): tokens in `src/styles/tokens.css`                   |
 | Code kwaliteit  | [Prettier](https://prettier.io/) (moet altijd toegepast worden voor gewijzigde bestanden) |
 | Typechecking    | `vue-tsc -b` (strict, project references) — een typefout blokkeert de build               |
 | Tests           | [Vitest](https://vitest.dev/) + `@vue/test-utils` + `jsdom` (`npm run test`)              |
@@ -82,7 +82,9 @@ Lijsten/
 ├── src/
 │   ├── App.vue             # View-switching: splash / login / registratie / verificatie / overzicht / detail
 │   ├── main.ts
-│   ├── styles.css          # Geïmporteerd in main.ts — alle styling
+│   ├── styles/main.css     # Geïmporteerd in main.ts — Tailwind, tokens, base-laag
+│   ├── styles/tokens.css   # Designtokens (@theme) + aliassen voor de oude namen
+│   ├── styles.css          # Oude CSS, in laag legacy (verdwijnt tijdens de migratie)
 │   ├── env.d.ts            # TypeScript env types
 │   ├── components/
 │   │   ├── AuthCard.vue          # Gedeelde kaart van de auth-schermen
@@ -389,7 +391,8 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Prettier verplicht.** Bij elke wijziging aan bewerkte bestanden Prettier toepassen (`npm run format` of editor-integratie). Geen ongevormatteerde diffs.
 - **Geen `console.log`** in productiecode (debug alleen tijdelijk, verwijderen voor commit). Dev-only `console.warn` achter `import.meta.env.DEV` is toegestaan en wordt becommentarieerd.
 - **Touch targets:** minimaal 44x44px waar praktisch mogelijk (behoud UX).
-- **CSS:** hergebruik bestaande stijl waar mogelijk. `styles.css` staat in `src/styles.css` en wordt geïmporteerd in `src/main.ts`. Houd dezelfde look & feel. De Google Fonts-link blijft in `index.html` (DM Sans / Playfair Display); die fonts nog zelf hosten is een openstaande wens voor volledig offline gebruik op Android.
+- **Tailwind-migratie (loopt, GitHub-issues #13–#24):** de styling gaat stap voor stap over naar Tailwind CSS v4. Tokens staan in `src/styles/tokens.css` (`@theme`, geen standaardpalet: alleen de eigen kleuren bestaan). `src/styles/main.css` is de ingang en importeert de oude `src/styles.css` in de laag `legacy`, zodat utilities altijd winnen. Elke migratiestap houdt het uiterlijk gelijk (vergelijk met screenshots van vóór de wijziging, desktop en 360px) en verwijdert de vervangen oude regels. Importeer nooit CSS zonder laag. De volledige stijlregels volgen in #24; tot dan geldt de rest van deze sectie voor de oude CSS.
+- **CSS:** hergebruik bestaande stijl waar mogelijk. De oude CSS staat in `src/styles.css` en komt binnen via `src/styles/main.css` (laag `legacy`); `main.ts` importeert alleen `main.css`. Houd dezelfde look & feel. De Google Fonts-link blijft in `index.html` (DM Sans / Playfair Display); die fonts nog zelf hosten is een openstaande wens voor volledig offline gebruik op Android.
 - **Bronvolgorde in `styles.css`:** latere regels met dezelfde selector winnen. Er staan dubbele definities (o.a. `.check-button`); bij het wijzigen van zo'n regel **allebei** aanpassen, anders blijft de oude waarde de baas.
 - **Comments:** alleen waar nodig om complexe logica uit te leggen (niet overbodig).
 - **Git:** commit per afgeronde taak waar zinvol. `.gitignore` bevat `node_modules/`, `dist/`, `.env`, `.DS_Store`, Android build-artifacts, `*.keystore`, `*.jks` en `*.apk`.

@@ -1,0 +1,102 @@
+/*
+ * Ingang van alle styling. Laagvolgorde: theme en base (preflight) van
+ * Tailwind, dan de oude CSS, dan components en utilities. De oude CSS zit in
+ * een eigen laag: een utility wint altijd van een oude regel, en preflight
+ * wint nooit van een oude regel. Importeer hier nooit CSS zonder laag.
+ */
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss";
+@import "./tokens.css";
+@import "../styles.css" layer(legacy);
+
+@layer base {
+  /*
+   * Zelfde uiterlijk als vóór Tailwind: zet de browserstandaarden terug waar
+   * de oude CSS op leunt en die preflight wijzigt (regelhoogte, inline svg,
+   * invoerkleur, placeholder, gecentreerde dialog). Utilities winnen nog
+   * steeds. Verdwijnt samen met de laag legacy (GitHub-issue #24).
+   */
+  html {
+    line-height: normal;
+  }
+
+  svg {
+    display: inline;
+    vertical-align: baseline;
+  }
+
+  input {
+    color: fieldtext;
+  }
+
+  /* De standaard placeholderkleur van Chrome (en dus van de Android WebView). */
+  ::placeholder {
+    color: #757575;
+  }
+
+  dialog {
+    margin: auto;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    color: var(--color-ink);
+    background: var(--color-paper);
+    font-family: var(--font-sans);
+  }
+
+  /* Geen eigen pull-to-refresh van Chrome/PWA (die herlaadt de pagina), §8.14. */
+  html,
+  body {
+    overscroll-behavior-y: contain;
+  }
+
+  button {
+    cursor: pointer;
+    /* Geen blauwe tap-flash op Android/Capacitor; touch i.p.v. 300ms-delay. */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Preflight zet grootte en gewicht van koppen terug; houd het huidige uiterlijk. */
+  h1,
+  h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: bold;
+    letter-spacing: -0.04em;
+  }
+
+  h1 {
+    font-size: 42px;
+    line-height: 1.12; /* ruimer dan 1: de descender van de 'j' blijft heel (§8.10) */
+  }
+
+  h2 {
+    font-size: 28px;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
