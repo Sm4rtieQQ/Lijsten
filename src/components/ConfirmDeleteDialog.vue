@@ -148,7 +148,7 @@ function onBackdropClick(event: MouseEvent): void {
   margin-top: 26px;
 }
 /* Route B (AGENTS.md §8.3): eigen knopstijl voor de dialoog, los van
-   `.dialog-submit`. Beide knoppen even hoog via `min-height`, met kleinere
+   `UiButton` (primary). Beide knoppen even hoog via `min-height`, met kleinere
    tekst dan de primaire knop. */
 .confirm-action {
   min-height: 44px;

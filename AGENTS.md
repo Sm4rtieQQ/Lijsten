@@ -90,6 +90,7 @@ Lijsten/
 │   │   ├── AuthCard.vue          # Gedeelde kaart van de auth-schermen
 │   │   ├── PasswordInput.vue     # Wachtwoordveld met oog-toggle
 │   │   ├── icons/                # Gedeelde SVG-iconen (sleephandvat, prullenbak)
+│   │   ├── ui/                   # Tailwind-primitives: UiButton, UiIconButton, UiSpinner
 │   │   ├── SplashView.vue        # Laadscherm (staat bij het opstarten)
 │   │   ├── LoginView.vue         # Inloggen + knop Registreren
 │   │   ├── RegisterView.vue      # Open registratie (zonder token)
