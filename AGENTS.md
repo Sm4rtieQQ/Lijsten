@@ -64,7 +64,7 @@ Lijsten/
 │   ├── tasks_05.md         # Plan fase 8: navigatie, synchroniseren en slepen (N6 wacht op akkoord)
 │   └── tasks_06.md         # Actief plan: minder verkeer tussen app en server
 ├── .gitattributes          # eol=lf, zodat Prettier ook op Windows schoon is
-├── index.html              # Vite entry (fonts + PWA-/iOS-meta)
+├── index.html              # Vite entry (PWA-/iOS-meta)
 ├── package.json
 ├── capacitor.config.json   # webDir: dist
 ├── vite.config.ts          # Vite + vitest config
@@ -356,7 +356,7 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Safari iOS:** installeren via **Delen → Zet op beginscherm**. `display: standalone` uit het manifest (plus de meta-tag) laat de app zonder browserchrome openen.
 - **Veilige zones:** `.app-shell` in `styles.css` verrekent `env(safe-area-inset-*)` (notch + home-indicator). Er zijn **twee** `.app-shell`-regels (basis + `max-width: 520px`); wijzig ze samen (§9).
 - **Deep links verschillen:** een browser kent `com.lijstjes.app://` niet. Op het web is `emailRedirectTo` daarom de volledige pagina-URL (`window.location.origin` **plus** `window.location.pathname`, zie §8.11), zodat een projectpagina onder `/Lijsten/` klopt. Voor de PWA moet dat **https-adres** in Supabase bij **Redirect URLs** staan (en in Site URL). Dat is dashboard-configuratie, geen code.
-- **Offline:** Supabase-verkeer (andere origin) wordt **nooit** gecacht; de app-shell wel. De data is toch al offline-first (§7).
+- **Offline:** Supabase-verkeer (andere origin) wordt **nooit** gecacht; de app-shell en de zelf gehoste fonts wel (de fonts na het eerste online bezoek, via de runtime-cache). De data is toch al offline-first (§7).
 - **Service worker-versie:** verhoog `CACHE_VERSION` in `public/sw.js` wanneer de app-shell wijzigt, zodat oude caches worden opgeruimd.
 - **Iconen:** de PNG's zijn gerasterd uit `public/icons/icon.svg` en `icon-maskable.svg` (ImageMagick). Wijzig de SVG en raster opnieuw; bewerk de PNG's niet met de hand.
 - **Testen:** Firefox is bruikbaar om de webapp te testen, maar installeert geen PWA. Gebruik Chrome (desktop/Android) of Safari (iOS). `npm run preview:host` toont de build op je telefoon via het LAN (http → alleen lay-out; voor de echte installatie is HTTPS nodig).
@@ -392,7 +392,7 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Geen `console.log`** in productiecode (debug alleen tijdelijk, verwijderen voor commit). Dev-only `console.warn` achter `import.meta.env.DEV` is toegestaan en wordt becommentarieerd.
 - **Touch targets:** minimaal 44x44px waar praktisch mogelijk (behoud UX).
 - **Tailwind-migratie (loopt, GitHub-issues #13–#24):** de styling gaat stap voor stap over naar Tailwind CSS v4. Tokens staan in `src/styles/tokens.css` (`@theme`, geen standaardpalet: alleen de eigen kleuren bestaan). `src/styles/main.css` is de ingang en importeert de oude `src/styles.css` in de laag `legacy`, zodat utilities altijd winnen. Elke migratiestap houdt het uiterlijk gelijk (vergelijk met screenshots van vóór de wijziging, desktop en 360px) en verwijdert de vervangen oude regels. Importeer nooit CSS zonder laag. De volledige stijlregels volgen in #24; tot dan geldt de rest van deze sectie voor de oude CSS.
-- **CSS:** hergebruik bestaande stijl waar mogelijk. De oude CSS staat in `src/styles.css` en komt binnen via `src/styles/main.css` (laag `legacy`); `main.ts` importeert alleen `main.css`. Houd dezelfde look & feel. De Google Fonts-link blijft in `index.html` (DM Sans / Playfair Display); die fonts nog zelf hosten is een openstaande wens voor volledig offline gebruik op Android.
+- **CSS:** hergebruik bestaande stijl waar mogelijk. De oude CSS staat in `src/styles.css` en komt binnen via `src/styles/main.css` (laag `legacy`); `main.ts` importeert alleen `main.css`. Houd dezelfde look & feel. DM Sans en Playfair Display staan zelf gehost in `src/assets/fonts/` (woff2 + OFL) met `@font-face` in `src/styles/fonts.css`; gebruik daar altijd relatieve `url()` (de app draait onder `./` en onder `/Lijsten/`). Geen Google Fonts-link.
 - **Bronvolgorde in `styles.css`:** latere regels met dezelfde selector winnen. Er staan dubbele definities (o.a. `.check-button`); bij het wijzigen van zo'n regel **allebei** aanpassen, anders blijft de oude waarde de baas.
 - **Comments:** alleen waar nodig om complexe logica uit te leggen (niet overbodig).
 - **Git:** commit per afgeronde taak waar zinvol. `.gitignore` bevat `node_modules/`, `dist/`, `.env`, `.DS_Store`, Android build-artifacts, `*.keystore`, `*.jks` en `*.apk`.

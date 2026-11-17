@@ -8,7 +8,7 @@
  * Verhoog CACHE_VERSION bij een release waarin de app-shell verandert, zodat
  * oude caches worden opgeruimd.
  */
-const CACHE_VERSION = "lijstjes-v1";
+const CACHE_VERSION = "lijstjes-v2";
 
 const APP_SHELL = [
   "./",
@@ -46,7 +46,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  // Alleen eigen origin cachen; Supabase en fonts gaan altijd over het netwerk.
+  // Alleen eigen origin cachen; Supabase gaat altijd over het netwerk. De zelf gehoste fonts (woff2 onder assets/) zijn eigen origin en vallen dus in de runtime-cache hieronder.
   if (url.origin !== self.location.origin) return;
 
   // Navigaties: netwerk eerst, val terug op de gecachte shell (offline openen).

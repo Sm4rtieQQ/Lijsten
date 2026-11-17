@@ -7,6 +7,7 @@
 @layer theme, base, legacy, components, utilities;
 
 @import "tailwindcss";
+@import "./fonts.css";
 @import "./tokens.css";
 @import "../styles.css" layer(legacy);
 
