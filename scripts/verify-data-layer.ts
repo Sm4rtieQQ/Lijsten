@@ -27,6 +27,7 @@ import {
 } from "../src/lib/storage";
 import type { StorageBackend } from "../src/lib/storage";
 import { flushOutbox, pullListsFromServer, backoffMs } from "../src/lib/sync";
+import { DUPLICATE_ERROR } from "../src/lib/errorMessages";
 import { isExactTitleMatch } from "../src/lib/utils";
 import { type OutboxEntry, type OutboxOpPayload } from "../src/types/sync";
 import type { List, ListItem } from "../src/types/app";
@@ -55,11 +56,15 @@ interface Call {
   /** Gesorteerde kolommen als "kolom:ascending"-paren. */
   orders: string[];
   row: unknown;
+  /** Opties van een `upsert` (onConflict, ignoreDuplicates). */
+  options?: unknown;
 }
 
 interface FauxClientOptions {
   /** Retourneert `true` wanneer deze call moet falen. */
   shouldFail?: (call: Call) => boolean;
+  /** Eigen Postgres-fout voor deze call (bv. 23505), vóór `shouldFail`. */
+  errorFor?: (call: Call) => { message: string; code: string } | null;
   /** Data die `select` teruggeeft (voor pull-tests). */
   selectData?: unknown;
   /**
@@ -84,10 +89,11 @@ function makeFauxClient(options: FauxClientOptions = {}): {
     const orders: string[] = [];
     let op = "select";
     let row: unknown = null;
+    let upsertOptions: unknown = undefined;
 
     const record = (): Promise<{
       data: unknown;
-      error: { message: string } | null;
+      error: { message: string; code?: string } | null;
     }> => {
       const call: Call = {
         table,
@@ -95,19 +101,22 @@ function makeFauxClient(options: FauxClientOptions = {}): {
         filters: [...filters],
         orders: [...orders],
         row,
+        options: upsertOptions,
       };
       calls.push(call);
+      const custom = options.errorFor ? options.errorFor(call) : null;
       const fail = options.shouldFail ? options.shouldFail(call) : false;
       return Promise.resolve({
         data: op === "select" ? (options.selectData ?? []) : null,
-        error: fail
-          ? { message: `fake-failure:${call.op}:${call.table}` }
-          : null,
+        error:
+          custom ??
+          (fail ? { message: `fake-failure:${call.op}:${call.table}` } : null),
       });
     };
 
     let chain: {
       insert: (r: unknown) => Promise<unknown>;
+      upsert: (r: unknown, opts?: unknown) => Promise<unknown>;
       update: (r: unknown) => typeof chain;
       delete: () => typeof chain;
       select: (cols: unknown) => typeof chain;
@@ -124,6 +133,12 @@ function makeFauxClient(options: FauxClientOptions = {}): {
       insert: (r: unknown) => {
         op = "insert";
         row = r;
+        return record();
+      },
+      upsert: (r: unknown, opts?: unknown) => {
+        op = "upsert";
+        row = r;
+        upsertOptions = opts;
         return record();
       },
       update: (r: unknown) => {
@@ -280,8 +295,8 @@ async function testOutboxPerEntityNoBulkWipe(): Promise<void> {
   assert(
     JSON.stringify(ops) ===
       JSON.stringify([
-        "insert:lists",
-        "insert:list_items",
+        "upsert:lists",
+        "upsert:list_items",
         "update:list_items",
         "delete:list_items",
         "delete:lists",
@@ -323,7 +338,7 @@ async function testFailureRetry(): Promise<void> {
   );
 
   const failing = makeFauxClient({
-    shouldFail: (call) => call.op === "insert",
+    shouldFail: (call) => call.op === "upsert",
   });
   const first = await flushOutbox("userA", client(failing.backend), mem);
   assert(first.ok === false, "eerste poging faalt bij offline");
@@ -552,7 +567,7 @@ async function testCompactionBeforeFlush(): Promise<void> {
   const ops = faux.calls.map((c) => `${c.op}:${c.table}`);
   assert(
     JSON.stringify(ops) ===
-      JSON.stringify(["insert:list_items", "rpc:reorder_items"]),
+      JSON.stringify(["upsert:list_items", "rpc:reorder_items"]),
     `één insert met de eindstand + één reorder (kreeg: ${ops.join(", ")})`,
   );
   const inserted = faux.calls[0]?.row as { text?: string; done?: boolean };
@@ -587,7 +602,7 @@ async function testCompactionBeforeFlush(): Promise<void> {
   );
   await flushOutbox("userA", client(faux2.backend), mem2);
   assert(
-    faux2.calls.map((c) => c.op).join(",") === "insert,delete",
+    faux2.calls.map((c) => c.op).join(",") === "upsert,delete",
     "gefaalde create blijft staan; de delete gaat mee",
   );
 }
@@ -621,7 +636,7 @@ async function testFlushSettlesQueue(): Promise<void> {
   const ok = makeFauxClient();
   await flushOutbox("userA", client(ok.backend), mem);
   assert(
-    ok.calls.map((c) => `${c.op}:${c.table}`).join(",") === "insert:list_items",
+    ok.calls.map((c) => `${c.op}:${c.table}`).join(",") === "upsert:list_items",
     "de retry verstuurt de al geslaagde list.create niet opnieuw",
   );
 
@@ -861,6 +876,174 @@ function testExactTitleMatch(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Idempotente creates (#4) en 23505 als succes (#5)
+// ---------------------------------------------------------------------------
+
+const pkeyDuplicate = (table: string) => ({
+  code: "23505",
+  message: `duplicate key value violates unique constraint "${table}_pkey"`,
+});
+
+function rowsOf(call: Call): Array<{ id: string }> {
+  return (Array.isArray(call.row) ? call.row : [call.row]) as Array<{
+    id: string;
+  }>;
+}
+
+async function testIdempotentCreates(): Promise<void> {
+  // Elke create gaat als upsert op id met ignoreDuplicates; owner_id = A.
+  const mem = memoryStorage();
+  const faux = makeFauxClient();
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "list.create", listId: "L1", title: "X" }),
+      entry({ type: "item.create", item: item("I1", "L1", "a") }),
+      entry({ type: "item.create", item: item("I2", "L1", "b") }),
+    ],
+    mem,
+  );
+  await flushOutbox("userA", client(faux.backend), mem);
+  const creates = faux.calls.filter((c) => c.op === "upsert");
+  assert(creates.length === 2, "list.create + gebundelde item.create");
+  assert(
+    !faux.calls.some((c) => c.op === "insert"),
+    "geen gewone insert meer voor creates",
+  );
+  for (const c of creates) {
+    assert(
+      JSON.stringify(c.options) ===
+        JSON.stringify({ onConflict: "id", ignoreDuplicates: true }),
+      `create is idempotent (kreeg: ${JSON.stringify(c.options)})`,
+    );
+  }
+  assert(
+    (creates[0]?.row as { owner_id?: string }).owner_id === "userA",
+    "list.create stuurt alleen de eigen owner_id",
+  );
+
+  // Server bewaart de rijen, maar het antwoord gaat verloren (timeout);
+  // de retry van dezelfde create slaagt en de wachtrij is leeg.
+  const mem2 = memoryStorage();
+  const stored = new Set<string>();
+  let lose = true;
+  const lossy = makeFauxClient({
+    errorFor: (call) => {
+      const ignore =
+        (call.options as { ignoreDuplicates?: boolean } | undefined)
+          ?.ignoreDuplicates === true;
+      const rows = rowsOf(call);
+      if (!ignore && rows.some((r) => stored.has(r.id))) {
+        return pkeyDuplicate(call.table);
+      }
+      rows.forEach((r) => stored.add(r.id));
+      if (!lose) return null;
+      lose = false;
+      return { code: "", message: "timeout" };
+    },
+  });
+  saveQueue(
+    "userA",
+    [
+      entry({ type: "item.create", item: item("T1", "L1", "a") }),
+      entry({ type: "item.create", item: item("T2", "L1", "b") }),
+    ],
+    mem2,
+  );
+  const lost = await flushOutbox("userA", client(lossy.backend), mem2);
+  assert(!lost.ok, "eerste poging: antwoord verloren");
+  const retried = await flushOutbox("userA", client(lossy.backend), mem2);
+  assert(
+    retried.ok && loadQueue("userA", mem2).length === 0,
+    "retry van een al aangekomen create slaagt, wachtrij leeg",
+  );
+}
+
+async function testDuplicateKeyCountsAsDone(): Promise<void> {
+  // Server antwoordt (nog) 23505: een vastgelopen create aan de kop verdwijnt
+  // en de rest van de wachtrij gaat door.
+  const mem = memoryStorage();
+  const strict = makeFauxClient({
+    errorFor: (call) =>
+      call.op === "upsert" && rowsOf(call).some((r) => r.id === "D1")
+        ? pkeyDuplicate(call.table)
+        : null,
+  });
+  saveQueue(
+    "userA",
+    [
+      {
+        ...entry({ type: "item.create", item: item("D1", "L1", "a") }),
+        attempts: 4,
+        lastError: DUPLICATE_ERROR,
+      },
+      entry({ type: "list.update", listId: "L1", title: "Nieuw" }),
+    ],
+    mem,
+  );
+  const healed = await flushOutbox("userA", client(strict.backend), mem);
+  assert(
+    healed.ok && loadQueue("userA", mem).length === 0,
+    "23505 op de primary key telt als gelukt; wachtrij leeg",
+  );
+  assert(
+    strict.calls.map((c) => `${c.op}:${c.table}`).join(",") ===
+      "upsert:list_items,update:lists",
+    "de operatie achter het duplicaat wordt verstuurd",
+  );
+
+  // Bundel met één bestaand item: los opnieuw, alleen het duplicaat valt weg.
+  const mem2 = memoryStorage();
+  const split = makeFauxClient({
+    errorFor: (call) =>
+      rowsOf(call).some((r) => r.id === "D1")
+        ? pkeyDuplicate(call.table)
+        : null,
+  });
+  saveQueue(
+    "userA",
+    ["D0", "D1", "D2"].map((id) =>
+      entry({ type: "item.create", item: item(id, "L1", id) }),
+    ),
+    mem2,
+  );
+  const result = await flushOutbox("userA", client(split.backend), mem2);
+  assert(
+    result.ok && result.syncedCount === 3,
+    "bundel met een duplicaat slaagt",
+  );
+  assert(
+    split.calls.map((c) => rowsOf(c).length).join(",") === "3,1,1,1",
+    `één mislukte bundel, daarna elke rij los (kreeg: ${split.calls
+      .map((c) => rowsOf(c).length)
+      .join(",")})`,
+  );
+  assert(
+    loadQueue("userA", mem2).length === 0,
+    "wachtrij leeg na het splitsen",
+  );
+
+  // 23505 op een andere constraint: gewoon mislukt, gemarkeerd.
+  const mem3 = memoryStorage();
+  const other = makeFauxClient({
+    errorFor: () => ({
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "other_key"',
+    }),
+  });
+  saveQueue(
+    "userA",
+    [entry({ type: "item.create", item: item("D3", "L1", "x") })],
+    mem3,
+  );
+  const failed = await flushOutbox("userA", client(other.backend), mem3);
+  assert(
+    !failed.ok && loadQueue("userA", mem3)[0]?.attempts === 1,
+    "23505 op een andere constraint blijft een fout",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 
@@ -877,6 +1060,8 @@ async function main(): Promise<void> {
   await testFlushSettlesQueue();
   await testBatchedRequests();
   await testReorderViaRpc();
+  await testIdempotentCreates();
+  await testDuplicateKeyCountsAsDone();
   testExactTitleMatch();
 
   console.log(

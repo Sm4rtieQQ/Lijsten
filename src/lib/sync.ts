@@ -76,6 +76,36 @@ export async function flushOutbox(
     return next;
   };
 
+  /** Markeert `failed`, bewaart de wachtrij en geeft het foutresultaat. */
+  const fail = (
+    failed: readonly OutboxEntry[],
+    error: string | null,
+  ): FlushResult => {
+    const lastError = error ?? "Onbekende synchronisatiefout";
+    const nextQueue = settle(
+      failed.map((entry) => ({
+        ...entry,
+        attempts: entry.attempts + 1,
+        lastError,
+      })),
+    );
+    saveSyncMeta(
+      userId,
+      {
+        lastSyncedAt: loadSyncMeta(userId, backend).lastSyncedAt,
+        lastError,
+      },
+      backend,
+    );
+    return {
+      ok: false,
+      error: lastError,
+      syncedCount,
+      queuedCount: nextQueue.length,
+      queue: nextQueue,
+    };
+  };
+
   while (pending.length > 0) {
     // Opeenvolgende creates/deletes gaan samen in één request (§7.3).
     const batch = nextBatch(pending);
@@ -83,34 +113,30 @@ export async function flushOutbox(
     pending.splice(0, batch.length);
 
     const result = await applyBatch(batch, userId, client);
-    if (!result.ok) {
-      const lastError = result.error ?? "Onbekende synchronisatiefout";
-      // Een mislukte bundel markeert al zijn operaties; ze blijven op hun plek
-      // (de kop van wat nog moet), het verstuurde gaat eruit.
-      const failed = batch.map((entry) => ({
-        ...entry,
-        attempts: entry.attempts + 1,
-        lastError,
-      }));
-      const nextQueue = settle(failed);
-      saveSyncMeta(
-        userId,
-        {
-          lastSyncedAt: loadSyncMeta(userId, backend).lastSyncedAt,
-          lastError,
-        },
-        backend,
-      );
-      return {
-        ok: false,
-        error: lastError,
-        syncedCount,
-        queuedCount: nextQueue.length,
-        queue: nextQueue,
-      };
+    if (result.ok || isAlreadyCreated(batch, result)) {
+      done.push(...batch);
+      syncedCount += batch.length;
+      continue;
     }
-    done.push(...batch);
-    syncedCount += batch.length;
+
+    if (batch.length > 1 && result.code === UNIQUE_VIOLATION) {
+      // Eén bestaande rij laat de hele insert mislukken. Los opnieuw versturen:
+      // alleen de echte duplicaten vallen weg, de rest komt alsnog aan.
+      for (const entry of batch) {
+        const single = await applyEntry(entry, userId, client);
+        if (!single.ok && !isAlreadyCreated([entry], single)) {
+          // Alleen deze markeren; de nog niet geprobeerde blijven ongemoeid.
+          return fail([entry], single.error);
+        }
+        done.push(entry);
+        syncedCount += 1;
+      }
+      continue;
+    }
+
+    // Een mislukte bundel markeert al zijn operaties; ze blijven op hun plek
+    // (de kop van wat nog moet), het verstuurde gaat eruit.
+    return fail(batch, result.error);
   }
 
   saveSyncMeta(
@@ -155,45 +181,95 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   });
 }
 
+/** Resultaat van één server-actie; reject nooit. */
+interface ApplyResult {
+  ok: boolean;
+  /** Leesbare NL-tekst (§7.5), of `null` bij succes. */
+  error: string | null;
+  /** Postgres/PostgREST-foutcode als de server die gaf (bv. `23505`). */
+  code: string | null;
+  /** Ruwe servermelding, alleen om de constraint te herkennen; nooit tonen. */
+  detail: string | null;
+}
+
+/** Postgres: unique-constraint geschonden. */
+const UNIQUE_VIOLATION = "23505";
+
+/** Primary key van de tabel waarin een create-operatie een rij aanmaakt. */
+function primaryKeyOf(entry: OutboxEntry): string | null {
+  if (entry.type === "item.create") return "list_items_pkey";
+  if (entry.type === "list.create") return "lists_pkey";
+  return null;
+}
+
+/**
+ * Bestaat de rij van deze ene create al op de server (23505 op de primary
+ * key)? Dan is een eerdere poging aangekomen (bv. na een timeout of een
+ * gekilde app) en is de operatie gewoon gelukt. Andere constraints en fouten
+ * tellen niet.
+ */
+function isAlreadyCreated(
+  batch: readonly OutboxEntry[],
+  result: ApplyResult,
+): boolean {
+  const [entry] = batch;
+  if (batch.length !== 1 || !entry) return false;
+  const pkey = primaryKeyOf(entry);
+  return (
+    pkey !== null &&
+    result.code === UNIQUE_VIOLATION &&
+    (result.detail?.includes(pkey) ?? false)
+  );
+}
+
 /** Past één outbox-entry toe op Supabase. Reject NOOIT (AGENTS.md §7.5/D2). */
 async function applyEntry(
   entry: OutboxEntry,
   userId: string,
   client: SupabaseClient<Database>,
-): Promise<{ ok: boolean; error: string | null }> {
+): Promise<ApplyResult> {
   return guarded(() => applyToClient(entry, userId, client));
 }
 
+/** De rij van een `item.create` zoals `list_items` hem verwacht. */
+function itemRow(entry: Extract<OutboxEntry, { type: "item.create" }>) {
+  return {
+    id: entry.item.id,
+    list_id: entry.item.listId,
+    text: entry.item.text,
+    done: entry.item.done,
+    position: entry.item.position,
+  };
+}
+
+/**
+ * Creates zijn idempotent (§7.3): bestaat de rij al, dan doet de server niets
+ * (`ON CONFLICT (id) DO NOTHING`) en overschrijft hij hem ook niet. Een
+ * herhaalde create na een timeout slaagt zo gewoon.
+ */
+const IGNORE_EXISTING = { onConflict: "id", ignoreDuplicates: true } as const;
+
 /**
  * Past een groep operaties toe (zie `nextBatch`): één operatie zoals altijd,
- * meerdere `item.create` als één insert, meerdere `item.delete` van één lijst
- * als één delete. Reject nooit.
+ * meerdere `item.create` als één (idempotente) insert, meerdere `item.delete`
+ * van één lijst als één delete. Reject nooit.
  */
 async function applyBatch(
   batch: readonly OutboxEntry[],
   userId: string,
   client: SupabaseClient<Database>,
-): Promise<{ ok: boolean; error: string | null }> {
+): Promise<ApplyResult> {
   const [first] = batch;
-  if (!first) return { ok: true, error: null };
+  if (!first) return { ok: true, error: null, code: null, detail: null };
   if (batch.length === 1) return applyEntry(first, userId, client);
 
   return guarded(async () => {
     if (first.type === "item.create") {
       const rows = batch.flatMap((entry) =>
-        entry.type === "item.create"
-          ? [
-              {
-                id: entry.item.id,
-                list_id: entry.item.listId,
-                text: entry.item.text,
-                done: entry.item.done,
-                position: entry.item.position,
-              },
-            ]
-          : [],
+        entry.type === "item.create" ? [itemRow(entry)] : [],
       );
-      return (await client.from("list_items").insert(rows)).error;
+      return (await client.from("list_items").upsert(rows, IGNORE_EXISTING))
+        .error;
     }
     if (first.type === "item.delete") {
       const ids = batch.flatMap((entry) =>
@@ -220,22 +296,30 @@ async function applyBatch(
  * Voert een server-actie uit met timeout en leesbare NL-fout; reject nooit
  * (AGENTS.md §7.5/D2).
  */
-async function guarded(
-  run: () => PromiseLike<{ message: string } | null>,
-): Promise<{ ok: boolean; error: string | null }> {
+async function guarded(run: () => PromiseLike<RawError>): Promise<ApplyResult> {
   try {
     // D2-fix (fase D): een hangende network-request mag de flush nooit kunnen
     // blokkeren (anders blijft `runFlush` op "syncing" hangen). Na de timeout
     // wordt de entry als mislukt gemarkeerd en gaat de backoff-cyclus verder.
     const error = await withTimeout(run(), REQUEST_TIMEOUT_MS);
     return error
-      ? { ok: false, error: toUserFacingError(error) }
-      : { ok: true, error: null };
+      ? {
+          ok: false,
+          error: toUserFacingError(error),
+          code: error.code ?? null,
+          detail: error.message,
+        }
+      : { ok: true, error: null, code: null, detail: null };
   } catch (err) {
     // Netwerk weg (bv. `TypeError: Failed to fetch`) of timeout: supabase-js
     // gooit hier i.p.v. een error-object terug te geven. Map naar leesbare
     // NL-tekst; de rejection mag nooit doorslaan naar `flushOutbox`/`runFlush`.
-    return { ok: false, error: toUserFacingError(err) };
+    return {
+      ok: false,
+      error: toUserFacingError(err),
+      code: null,
+      detail: null,
+    };
   }
 }
 
@@ -280,16 +364,20 @@ async function applyToClient(
   entry: OutboxEntry,
   userId: string,
   client: SupabaseClient<Database>,
-): Promise<{ message: string } | null> {
-  let error: { message: string } | null = null;
+): Promise<RawError> {
+  let error: RawError = null;
 
   switch (entry.type) {
     case "list.create": {
-      const res = await client.from("lists").insert({
-        id: entry.listId,
-        owner_id: userId,
-        title: entry.title,
-      });
+      // Bestaat de lijst al, dan blijft hij (en zijn titel) zoals hij is.
+      const res = await client.from("lists").upsert(
+        {
+          id: entry.listId,
+          owner_id: userId,
+          title: entry.title,
+        },
+        IGNORE_EXISTING,
+      );
       error = res.error;
       break;
     }
@@ -312,13 +400,9 @@ async function applyToClient(
       break;
     }
     case "item.create": {
-      const res = await client.from("list_items").insert({
-        id: entry.item.id,
-        list_id: entry.item.listId,
-        text: entry.item.text,
-        done: entry.item.done,
-        position: entry.item.position,
-      });
+      const res = await client
+        .from("list_items")
+        .upsert(itemRow(entry), IGNORE_EXISTING);
       error = res.error;
       break;
     }
