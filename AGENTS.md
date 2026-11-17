@@ -472,6 +472,7 @@ De PWA wordt **automatisch** gedeployed naar GitHub Pages door `.github/workflow
 - **Waarom dit werkt zonder base-aanpassing:** `vite.config.ts` staat op `base: "./"` (nodig voor de Capacitor-WebView), dus assets én de service worker worden **relatief** geladen en werken ook onder een subpad. Verwijs in `index.html` naar publieke bestanden met een **root-absoluut** pad (`/manifest.webmanifest`); Vite zet dat met `base: "./"` om naar een relatief pad.
 - **Supabase (dashboard):** zet `https://sm4rtieqq.github.io/Lijsten/` ook in **Site URL** en **Redirect URLs**, anders komt de bevestigings-/herstelmail niet terug in de PWA.
 - **Volgorde:** de workflow draait eerst `npm ci`, `npm run test` en `npm run build`; een falende test of typecheck blokkeert de deploy.
+- **PR-controles:** `.github/workflows/pr-checks.yml` draait op elke pull request naar `master`: `npm ci`, `typecheck`, `test`, `format:check`, `build` en `verify:data`. Deze workflow gebruikt **geen secrets** (build en verify werken zonder Supabase-config; PR's vanaf forks krijgen geen secrets) en heeft alleen `contents: read`. Een nieuwe push annuleert de lopende run. Wil je dat een falende check het mergen blokkeert, zet dan in _Settings → Branches_ een regel op `master` met de check **PR-controles / checks** als verplicht; dat is een repo-instelling en staat niet in de code.
 
 ## 11. Lessons learned (niet opnieuw doen)
 
