@@ -1,27 +1,42 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockMarkDirty } = vi.hoisted(() => ({ mockMarkDirty: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  markDirty: vi.fn(),
+  registerPuller: vi.fn(),
+  pullListsFromServer: vi.fn(),
+  /** Standaard geen server; de pull-tests zetten hier een nep-client neer. */
+  supabase: null as object | null,
+}));
+const mockMarkDirty = mocks.markDirty;
 
-// Geen server: `refreshData` stopt dan meteen, zodat alleen de lokale cache en
-// de outbox getest worden.
+// Geen server (tenzij een pull-test er een neerzet): de pull stopt dan meteen,
+// zodat alleen de lokale cache en de outbox getest worden. `syncWithServer` is
+// een stub; de pull wordt in de pull-tests direct aangeroepen.
 vi.mock("../lib/supabase", () => ({
-  supabase: null,
+  get supabase() {
+    return mocks.supabase;
+  },
   isSupabaseConfigured: false,
 }));
+vi.mock("../lib/sync", () => ({
+  pullListsFromServer: mocks.pullListsFromServer,
+}));
 vi.mock("./useSync", () => ({
-  markDirty: mockMarkDirty,
-  registerPuller: vi.fn(),
+  markDirty: mocks.markDirty,
+  registerPuller: mocks.registerPuller,
   syncWithServer: vi.fn(() => Promise.resolve()),
 }));
 
+import { createOutboxEntry } from "../lib/outbox";
 import {
   loadActiveView,
   loadLists,
   loadQueue,
   saveActiveView,
   saveLists,
+  saveQueue,
 } from "../lib/storage";
-import { createList, createListItem } from "../types/app";
+import { createList, createListItem, type List } from "../types/app";
 import { useLists } from "./useLists";
 
 const USER = "user-a";
@@ -204,5 +219,121 @@ describe("useLists — laatst bezochte pagina (AGENTS.md §8.13)", () => {
     L.setActiveList(id);
     L.reset();
     expect(loadActiveView(USER)).toBeNull();
+  });
+});
+
+describe("useLists — pull overschrijft geen wijzigingen van tijdens de pull (#9, §7.3)", () => {
+  type PullResult = { data: List[]; error: string | null };
+  /** De bij `useSync` aangemelde pull-stap (`pullFromServer`). */
+  const pull = mocks.registerPuller.mock.calls[0]![0] as () => Promise<
+    string | null
+  >;
+
+  /** Een pull die pas antwoordt als de test `respond` aanroept. */
+  function deferPull(): (result: PullResult) => void {
+    let respond!: (result: PullResult) => void;
+    mocks.pullListsFromServer.mockReturnValueOnce(
+      new Promise<PullResult>((resolve) => {
+        respond = resolve;
+      }),
+    );
+    return respond;
+  }
+
+  /** Wat de server teruggeeft: één lijst zonder het nieuwe item. */
+  function serverState(list: List): List[] {
+    return [{ ...list, items: [] }];
+  }
+
+  beforeEach(() => {
+    mocks.supabase = {};
+    mocks.pullListsFromServer.mockReset();
+    // De lijst staat al op de server: lege outbox, zodat de pull mag starten.
+    L.createNewList("Boodschappen");
+    saveQueue(USER, []);
+  });
+
+  afterEach(() => {
+    mocks.supabase = null;
+  });
+
+  it("een normale pull vervangt de state en de cache", async () => {
+    const respond = deferPull();
+    const pending = pull();
+    const fromServer = [createList("Van een ander apparaat")];
+    respond({ data: fromServer, error: null });
+
+    await expect(pending).resolves.toBeNull();
+    expect(L.lists.value).toEqual(fromServer);
+    expect(loadLists(USER)).toEqual(fromServer);
+  });
+
+  it("niet pullen als de outbox niet leeg is", async () => {
+    const id = L.lists.value[0]!.id;
+    L.addItem(id, "melk");
+
+    await expect(pull()).resolves.toBeNull();
+    expect(mocks.pullListsFromServer).not.toHaveBeenCalled();
+    expect(L.lists.value[0]?.items.map((i) => i.text)).toEqual(["melk"]);
+  });
+
+  it("een item toegevoegd tijdens de pull blijft zichtbaar en in de cache", async () => {
+    const list = L.lists.value[0]!;
+    const respond = deferPull();
+    const pending = pull();
+
+    L.addItem(list.id, "melk");
+    respond({ data: serverState(list), error: null });
+
+    await expect(pending).resolves.toBeNull();
+    expect(L.lists.value[0]?.items.map((i) => i.text)).toEqual(["melk"]);
+    expect(loadLists(USER)?.[0]?.items.map((i) => i.text)).toEqual(["melk"]);
+    expect(opTypes()).toEqual(["item.create"]);
+  });
+
+  it("ook als die wijziging al verstuurd is vóór het antwoord", async () => {
+    // Het antwoord kan van vóór de insert zijn: lege outbox is niet genoeg.
+    const list = L.lists.value[0]!;
+    const respond = deferPull();
+    const pending = pull();
+
+    L.addItem(list.id, "melk");
+    saveQueue(USER, []); // bv. flushNow bij `visibilitychange` → hidden
+    respond({ data: serverState(list), error: null });
+
+    await expect(pending).resolves.toBeNull();
+    expect(L.lists.value[0]?.items.map((i) => i.text)).toEqual(["melk"]);
+  });
+
+  it("ook als een ander tabblad intussen iets in de outbox zette", async () => {
+    const list = L.lists.value[0]!;
+    const respond = deferPull();
+    const pending = pull();
+
+    saveQueue(USER, [
+      createOutboxEntry({ type: "list.update", listId: list.id, title: "X" }),
+    ]);
+    respond({ data: [], error: null });
+
+    await expect(pending).resolves.toBeNull();
+    expect(L.lists.value.map((l) => l.id)).toEqual([list.id]);
+  });
+
+  it("na een overgeslagen pull vervangt de volgende pull de state weer", async () => {
+    const list = L.lists.value[0]!;
+    const respondFirst = deferPull();
+    const first = pull();
+    L.addItem(list.id, "melk");
+    respondFirst({ data: serverState(list), error: null });
+    await first;
+
+    saveQueue(USER, []); // verstuurd
+    const onServer = [{ ...L.lists.value[0]!, title: "Elders hernoemd" }];
+    const respondSecond = deferPull();
+    const second = pull();
+    respondSecond({ data: onServer, error: null });
+
+    await expect(second).resolves.toBeNull();
+    expect(L.lists.value).toEqual(onServer);
   });
 });
