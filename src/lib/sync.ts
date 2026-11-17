@@ -159,16 +159,37 @@ export async function flushOutbox(
 /** Maximale wachttijd per server-actie voordat we de verbinding opgeven. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
+/** Een request met timeout (zie `withTimeout`). */
+interface TimedRequest<T> {
+  /** Het antwoord, of een "timeout"-fout als het niet op tijd kwam. */
+  result: Promise<T>;
+  /** Vervult zodra het request écht klaar is (ook na een timeout); reject nooit. */
+  ended: Promise<void>;
+}
+
 /**
- * Race een (mogelijk hangende) belofte met een timeout. Als de belofte niet op
- * tijd klaar is, reject deze racer met een "timeout"-fout — de oorspronkelijke
- * belofte blijft wel afhandelbaar (`.then`-handlers zijn attacht), dus nooit
- * een unhandled rejection; zijn resultaat wordt simpelweg genegeerd.
+ * Start een request met een `AbortSignal` en een timeout (#8). Komt het
+ * antwoord niet op tijd, dan wordt het request afgebroken (`abort()`) en
+ * rejecten we met "timeout". Het request zelf blijft afhandelbaar (handlers
+ * zijn attacht), dus nooit een unhandled rejection; zijn late antwoord wordt
+ * genegeerd. `ended` laat zien wanneer het request echt gestopt is.
  */
-function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timeout")), ms);
-    promise.then(
+function withTimeout<T>(
+  run: (signal: AbortSignal) => PromiseLike<T>,
+  ms: number,
+): TimedRequest<T> {
+  const controller = new AbortController();
+  const request = Promise.resolve().then(() => run(controller.signal));
+  const ended = request.then(
+    () => undefined,
+    () => undefined,
+  );
+  const result = new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("timeout"));
+    }, ms);
+    request.then(
       (value) => {
         clearTimeout(timer);
         resolve(value);
@@ -179,7 +200,27 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
       },
     );
   });
+  return { result, ended };
 }
+
+/** Vervult met `true` als `promise` binnen `ms` klaar is, anders `false`. */
+function endsWithin(promise: Promise<void>, ms: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    void promise.then(() => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+/**
+ * Per client het laatst gestarte schrijfrequest (zijn `ended`). Een nieuw
+ * request wacht daarop, zodat er nooit twee tegelijk lopen: ook niet als het
+ * vorige een timeout kreeg en nog niet gestopt is (#8). Per client (niet
+ * globaal), zodat een andere client — bv. in de tests — los staat.
+ */
+const lastWrite = new WeakMap<object, Promise<void>>();
 
 /** Resultaat van één server-actie; reject nooit. */
 interface ApplyResult {
@@ -228,7 +269,9 @@ async function applyEntry(
   userId: string,
   client: SupabaseClient<Database>,
 ): Promise<ApplyResult> {
-  return guarded(() => applyToClient(entry, userId, client));
+  return guarded(client, (signal) =>
+    applyToClient(entry, userId, client, signal),
+  );
 }
 
 /** De rij van een `item.create` zoals `list_items` hem verwacht. */
@@ -263,13 +306,16 @@ async function applyBatch(
   if (!first) return { ok: true, error: null, code: null, detail: null };
   if (batch.length === 1) return applyEntry(first, userId, client);
 
-  return guarded(async () => {
+  return guarded(client, async (signal) => {
     if (first.type === "item.create") {
       const rows = batch.flatMap((entry) =>
         entry.type === "item.create" ? [itemRow(entry)] : [],
       );
-      return (await client.from("list_items").upsert(rows, IGNORE_EXISTING))
-        .error;
+      const res = await client
+        .from("list_items")
+        .upsert(rows, IGNORE_EXISTING)
+        .abortSignal(signal);
+      return res.error;
     }
     if (first.type === "item.delete") {
       const ids = batch.flatMap((entry) =>
@@ -280,12 +326,13 @@ async function applyBatch(
         .from("list_items")
         .delete()
         .in("id", ids)
-        .eq("list_id", first.listId);
+        .eq("list_id", first.listId)
+        .abortSignal(signal);
       return res.error;
     }
     // `nextBatch` bundelt niets anders; voor de zekerheid één voor één.
     for (const entry of batch) {
-      const error = await applyToClient(entry, userId, client);
+      const error = await applyToClient(entry, userId, client, signal);
       if (error) return error;
     }
     return null;
@@ -294,14 +341,37 @@ async function applyBatch(
 
 /**
  * Voert een server-actie uit met timeout en leesbare NL-fout; reject nooit
- * (AGENTS.md §7.5/D2).
+ * (AGENTS.md §7.5/D2). Nooit twee schrijfrequests van één client tegelijk
+ * (#8): eerst wachten tot het vorige gestopt is.
  */
-async function guarded(run: () => PromiseLike<RawError>): Promise<ApplyResult> {
+async function guarded(
+  client: SupabaseClient<Database>,
+  run: (signal: AbortSignal) => PromiseLike<RawError>,
+): Promise<ApplyResult> {
+  // De plek in de rij meteen (synchroon) innemen, zodat een gelijktijdige
+  // aanroep achter dit request aansluit en niet naast het vorige gaat lopen.
+  const previous = lastWrite.get(client);
+  let markEnded!: () => void;
+  lastWrite.set(client, new Promise<void>((resolve) => (markEnded = resolve)));
   try {
+    // Het vorige request kreeg bv. een timeout en is afgebroken, maar loopt
+    // mogelijk nog (de server kan hem al verwerken). Niet een tweede kopie
+    // ernaast starten: wachten tot hij stopt. Stopt hij ook niet binnen de
+    // timeout, dan deze poging als timeout laten mislukken zonder te versturen;
+    // de backoff probeert het later opnieuw.
+    if (previous && !(await endsWithin(previous, REQUEST_TIMEOUT_MS))) {
+      // Niets verstuurd: wie na ons komt, wacht nog steeds op het vorige.
+      void previous.then(markEnded);
+      throw new Error("timeout");
+    }
+
     // D2-fix (fase D): een hangende network-request mag de flush nooit kunnen
     // blokkeren (anders blijft `runFlush` op "syncing" hangen). Na de timeout
-    // wordt de entry als mislukt gemarkeerd en gaat de backoff-cyclus verder.
-    const error = await withTimeout(run(), REQUEST_TIMEOUT_MS);
+    // wordt het request afgebroken, de entry als mislukt gemarkeerd en gaat
+    // de backoff-cyclus verder.
+    const { result, ended } = withTimeout(run, REQUEST_TIMEOUT_MS);
+    void ended.then(markEnded);
+    const error = await result;
     return error
       ? {
           ok: false,
@@ -364,20 +434,24 @@ async function applyToClient(
   entry: OutboxEntry,
   userId: string,
   client: SupabaseClient<Database>,
+  signal: AbortSignal,
 ): Promise<RawError> {
   let error: RawError = null;
 
   switch (entry.type) {
     case "list.create": {
       // Bestaat de lijst al, dan blijft hij (en zijn titel) zoals hij is.
-      const res = await client.from("lists").upsert(
-        {
-          id: entry.listId,
-          owner_id: userId,
-          title: entry.title,
-        },
-        IGNORE_EXISTING,
-      );
+      const res = await client
+        .from("lists")
+        .upsert(
+          {
+            id: entry.listId,
+            owner_id: userId,
+            title: entry.title,
+          },
+          IGNORE_EXISTING,
+        )
+        .abortSignal(signal);
       error = res.error;
       break;
     }
@@ -386,7 +460,8 @@ async function applyToClient(
         .from("lists")
         .update({ title: entry.title })
         .eq("id", entry.listId)
-        .eq("owner_id", userId);
+        .eq("owner_id", userId)
+        .abortSignal(signal);
       error = res.error;
       break;
     }
@@ -395,14 +470,16 @@ async function applyToClient(
         .from("lists")
         .delete()
         .eq("id", entry.listId)
-        .eq("owner_id", userId);
+        .eq("owner_id", userId)
+        .abortSignal(signal);
       error = res.error;
       break;
     }
     case "item.create": {
       const res = await client
         .from("list_items")
-        .upsert(itemRow(entry), IGNORE_EXISTING);
+        .upsert(itemRow(entry), IGNORE_EXISTING)
+        .abortSignal(signal);
       error = res.error;
       break;
     }
@@ -415,7 +492,8 @@ async function applyToClient(
           position: entry.item.position,
         })
         .eq("id", entry.item.id)
-        .eq("list_id", entry.item.listId);
+        .eq("list_id", entry.item.listId)
+        .abortSignal(signal);
       error = res.error;
       break;
     }
@@ -423,21 +501,26 @@ async function applyToClient(
       const res = await client
         .from("list_items")
         .delete()
-        .eq("id", entry.itemId);
+        .eq("id", entry.itemId)
+        .abortSignal(signal);
       error = res.error;
       break;
     }
     case "list.reorder": {
       error = await reorderViaRpc(
         client,
-        () => client.rpc("reorder_lists", { p_list_ids: entry.listIds }),
+        () =>
+          client
+            .rpc("reorder_lists", { p_list_ids: entry.listIds })
+            .abortSignal(signal),
         async () => {
           const updates = entry.listIds.map((listId, position) =>
             client
               .from("lists")
               .update({ position })
               .eq("id", listId)
-              .eq("owner_id", userId),
+              .eq("owner_id", userId)
+              .abortSignal(signal),
           );
           const results = await Promise.all(updates);
           return results.find((r) => r.error)?.error ?? null;
@@ -449,17 +532,20 @@ async function applyToClient(
       error = await reorderViaRpc(
         client,
         () =>
-          client.rpc("reorder_items", {
-            p_list_id: entry.listId,
-            p_item_ids: entry.itemIds,
-          }),
+          client
+            .rpc("reorder_items", {
+              p_list_id: entry.listId,
+              p_item_ids: entry.itemIds,
+            })
+            .abortSignal(signal),
         async () => {
           const updates = entry.itemIds.map((itemId, position) =>
             client
               .from("list_items")
               .update({ position })
               .eq("id", itemId)
-              .eq("list_id", entry.listId),
+              .eq("list_id", entry.listId)
+              .abortSignal(signal),
           );
           const results = await Promise.all(updates);
           return results.find((r) => r.error)?.error ?? null;
@@ -517,8 +603,9 @@ export async function pullListsFromServer(
     // (defense in depth, zie AGENTS.md §7.1).
     // Net als bij `applyEntry`: een hangende/afgebroken request mag hydrate en
     // refreshData niet kunnen blokkeren; daarom ook hier een timeout.
+    // Na de timeout wordt het request ook afgebroken (#8).
     const { data, error } = await withTimeout(
-      Promise.resolve(
+      (signal) =>
         client
           .from("lists")
           .select(
@@ -526,10 +613,10 @@ export async function pullListsFromServer(
           )
           .eq("owner_id", userId)
           .order("position", { ascending: true })
-          .order("created_at", { ascending: false }),
-      ),
+          .order("created_at", { ascending: false })
+          .abortSignal(signal),
       REQUEST_TIMEOUT_MS,
-    );
+    ).result;
 
     if (error) return { data: [], error: toUserFacingError(error) };
 
