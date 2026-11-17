@@ -39,6 +39,11 @@ interface FakeServerOptions {
   rejectRow?: (table: string, row: Row) => PgError | null;
   /** Slaat de rijen op, maar het antwoord komt nooit aan (timeout, kill). */
   loseResponse?: (request: Request) => boolean;
+  /**
+   * Slaat de rijen op en laat het antwoord hangen tot het request wordt
+   * afgebroken (een echte timeout van de app).
+   */
+  hangAfterCommit?: (request: Request) => boolean;
 }
 
 const duplicate = (table: string): PgError => ({
@@ -73,6 +78,13 @@ function fakeServer(options: FakeServerOptions = {}) {
     }
     for (const row of request.rows) {
       if (!table.has(row.id)) table.set(row.id, { ...row });
+    }
+    if (options.hangAfterCommit?.(request)) {
+      return new Promise((resolve) => {
+        request.signal?.addEventListener("abort", () =>
+          resolve({ error: { code: "", message: "AbortError: aborted" } }),
+        );
+      });
     }
     if (options.loseResponse?.(request)) {
       return Promise.reject(new TypeError("Failed to fetch"));
@@ -279,6 +291,59 @@ describe("flushOutbox — idempotente creates (#4)", () => {
       USER,
       USER,
     ]);
+  });
+});
+
+describe("flushOutbox — retry nadat de server al had vastgelegd (#6)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("app gekild na de commit: een verse create (attempts 0) voor een bestaande rij slaagt", async () => {
+    // Zelfs een server die als gewone insert antwoordt (23505) mag de retry
+    // niet laten vastlopen.
+    const server = fakeServer({ strictInsert: true });
+    server.seed("list_items", { id: "I1", text: "I1" });
+    const mem = memoryStorage();
+    saveQueue(USER, [createItem("I1")], mem);
+    expect(loadQueue(USER, mem)[0]).toMatchObject({
+      attempts: 0,
+      lastError: null,
+    });
+
+    const result = await flushOutbox(USER, server.client, mem);
+
+    expect(result).toMatchObject({ ok: true, syncedCount: 1, queuedCount: 0 });
+    expect(loadQueue(USER, mem)).toEqual([]);
+    expect(server.tables.get("list_items")!.size).toBe(1);
+  });
+
+  it("echte timeout nadat de server vastlegde: de retry geeft één rij en een lege wachtrij", async () => {
+    vi.useFakeTimers();
+    let hung = false;
+    const server = fakeServer({
+      hangAfterCommit: () => {
+        if (hung) return false;
+        hung = true;
+        return true;
+      },
+    });
+    const mem = memoryStorage();
+    saveQueue(USER, [createItem("I1"), createItem("I2")], mem);
+
+    const first = flushOutbox(USER, server.client, mem);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const timedOut = await first;
+
+    expect(timedOut).toMatchObject({ ok: false, error: CONNECTION_DROPPED });
+    expect(server.tables.get("list_items")!.size).toBe(2);
+    expect(loadQueue(USER, mem).map((e) => e.attempts)).toEqual([1, 1]);
+
+    const retry = await flushOutbox(USER, server.client, mem);
+
+    expect(retry).toMatchObject({ ok: true, syncedCount: 2, queuedCount: 0 });
+    expect(loadQueue(USER, mem)).toEqual([]);
+    expect(server.tables.get("list_items")!.size).toBe(2);
   });
 });
 
