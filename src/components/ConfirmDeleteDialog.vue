@@ -5,6 +5,7 @@ import { isExactTitleMatch } from "../lib/utils";
 import type { List } from "../types/app";
 import UiButton from "./ui/UiButton.vue";
 import UiDialog from "./ui/UiDialog.vue";
+import UiInput from "./ui/UiInput.vue";
 
 const props = defineProps<{ list: List }>();
 const emit = defineEmits<{ close: []; confirm: [] }>();
@@ -50,10 +51,10 @@ function onSubmit(): void {
     >
       Lijsttitel
     </label>
-    <input
+    <UiInput
       id="confirm-list-input"
       v-model="input"
-      class="w-full border-0 border-b border-line bg-transparent py-[13px] text-[16px] text-ink outline-0 focus:border-accent"
+      variant="underline"
       type="text"
       :placeholder="list.title"
       maxlength="60"

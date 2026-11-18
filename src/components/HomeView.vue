@@ -12,6 +12,7 @@ import ListCard from "./ListCard.vue";
 import SyncIndicator from "./SyncIndicator.vue";
 import UiButton from "./ui/UiButton.vue";
 import UiDialog from "./ui/UiDialog.vue";
+import UiInput from "./ui/UiInput.vue";
 import UiIconButton from "./ui/UiIconButton.vue";
 import type { List } from "../types/app";
 
@@ -277,9 +278,9 @@ const ghostStyle = computed(() =>
     <UiDialog v-model:open="newListOpen" closable @submit="onCreateList">
       <template #eyebrow>NIEUW LIJSTJE</template>
       <template #title>Hoe heet het lijstje?</template>
-      <input
+      <UiInput
         v-model="newListTitle"
-        class="w-full border-0 border-b border-line bg-transparent py-[13px] text-[16px] text-ink outline-0 focus:border-accent"
+        variant="underline"
         type="text"
         maxlength="60"
         placeholder="Bijvoorbeeld: Boodschappen"
