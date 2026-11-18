@@ -180,7 +180,7 @@ const ghostStyle = computed(() =>
 </script>
 
 <template>
-  <section class="view">
+  <section class="animate-fade">
     <header class="mb-9 flex items-start justify-between">
       <div class="min-w-0">
         <!-- Ruimte onder het h1 houdt de descender van de 'j' heel (§8.10). -->

@@ -85,7 +85,7 @@ const state = computed(() => {
   <div
     data-testid="pull-indicator"
     :data-state="state"
-    class="group pointer-events-none fixed top-safe-top left-1/2 z-40 grid size-9 place-items-center rounded-full bg-surface shadow-[0_4px_14px_rgba(52,46,42,0.16)] transition-[transform,opacity] duration-200 ease-[ease] data-[state=pulling]:transition-none data-[state=ready]:transition-none motion-reduce:transition-none"
+    class="group pointer-events-none fixed top-safe-top left-1/2 z-40 grid size-9 place-items-center rounded-full bg-surface shadow-indicator transition-[transform,opacity] duration-200 ease-[ease] data-[state=pulling]:transition-none data-[state=ready]:transition-none motion-reduce:transition-none"
     :style="indicatorStyle"
     aria-hidden="true"
   >

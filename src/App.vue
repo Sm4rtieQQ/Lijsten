@@ -232,11 +232,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <!-- App-shell: veilige zones (notch + home-indicator) via de
+       safe-area-tokens, AGENTS.md §8.12. -->
+  <div
+    class="m-auto min-h-dvh w-[min(100%,760px)] pt-[calc(48px+--theme(--spacing-safe-top))] pr-[calc(28px+--theme(--spacing-safe-right))] pb-[calc(64px+--theme(--spacing-safe-bottom))] pl-[calc(28px+--theme(--spacing-safe-left))] max-sm:pt-[calc(32px+--theme(--spacing-safe-top))] max-sm:pr-[calc(18px+--theme(--spacing-safe-right))] max-sm:pb-[calc(48px+--theme(--spacing-safe-bottom))] max-sm:pl-[calc(18px+--theme(--spacing-safe-left))]"
+  >
     <!-- Groene bevestiging na e-mailverificatie (AGENTS.md §7.6). -->
     <p
       v-if="justVerified && !showSplash"
-      class="fixed top-3.5 left-1/2 z-30 m-0 max-w-[calc(100%-28px)] -translate-x-1/2 rounded-pill border border-[#b7e0c4] bg-[#e4f5ea] px-[18px] py-2.5 text-[13px] font-bold text-[#1c6b3a] shadow-[0_10px_26px_rgba(46,92,63,0.16)]"
+      class="fixed top-3.5 left-1/2 z-30 m-0 max-w-[calc(100%-28px)] -translate-x-1/2 rounded-pill border border-success-line bg-success-soft px-[18px] py-2.5 text-[13px] font-bold text-success shadow-banner"
       role="status"
     >
       Je account is bevestigd.
@@ -251,10 +255,10 @@ onBeforeUnmount(() => {
     <SplashView v-if="showSplash" />
     <ResetPasswordView v-else-if="recovery" @cancel="recovery = false" />
     <template v-else-if="user">
-      <!-- Beide views blijven gemonteerd; de .active-klasse bepaalt welke
-           zichtbaar is (idem legacy: .view { display:none } / .view.active). -->
-      <HomeView :class="{ active: !activeListId }" />
-      <ListDetailView :class="{ active: !!activeListId }" />
+      <!-- Beide views blijven gemonteerd; v-show bepaalt welke zichtbaar is
+           (en start de fade-animatie opnieuw bij elke wissel). -->
+      <HomeView v-show="!activeListId" />
+      <ListDetailView v-show="!!activeListId" />
       <!-- Swipe omlaag synchroniseert, op beide schermen (§8.14). -->
       <PullToRefresh />
     </template>

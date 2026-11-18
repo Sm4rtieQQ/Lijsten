@@ -8,8 +8,7 @@ import UiIconButton from "./UiIconButton.vue";
 /**
  * Modale dialoog op de native `<dialog>` met `showModal()` (GitHub-issue #18):
  * de browser vangt de focus, legt de rest van de pagina inert en tekent de
- * `::backdrop`. Het uiterlijk is exact dat van de oude `.new-list-dialog` en
- * `.confirm-dialog`.
+ * `::backdrop`. Voor het nieuwe-lijstjedialoog en de verwijderbevestiging.
  *
  * - `v-model:open` opent en sluit. ESC, de Android-terugknop (§8.13), de
  *   sluitknop (`closable`) en een klik buiten de dialoog zetten `open` op
@@ -105,7 +104,7 @@ function onClick(event: MouseEvent): void {
   <dialog
     ref="dialogEl"
     :class="[
-      'rounded-dialog bg-surface text-ink shadow-dialog backdrop:bg-scrim backdrop:backdrop-blur-[2px]',
+      'm-auto rounded-dialog bg-surface text-ink shadow-dialog backdrop:bg-scrim backdrop:backdrop-blur-[2px]',
       sizes[size].dialog,
     ]"
     aria-modal="true"

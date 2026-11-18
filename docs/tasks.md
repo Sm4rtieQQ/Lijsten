@@ -100,3 +100,16 @@ Voortgang per taak. Zet een taak pas op `[x]` nadat deze aantoonbaar is afgerond
 - [ ] Fase 7 — Refactor (gedrag ongewijzigd): zie [tasks_04.md](tasks_04.md).
 - [ ] Fase 8 — Navigatie, synchroniseren en slepen: zie [tasks_05.md](tasks_05.md).
 - [ ] Fase 9 — Minder verkeer tussen app en server: zie [tasks_06.md](tasks_06.md).
+- [ ] Fase 10 — Tailwind-migratie (gedrag en uiterlijk ongewijzigd, GitHub-issues #13–#24; onderzoek in `docs/research/03-tailwind-primitives.md`):
+  - [x] #13 fundament: Tailwind CSS v4, tokens in `src/styles/tokens.css`, laagvolgorde in `src/styles/main.css`
+  - [x] #14 fonts zelf gehost (`src/assets/fonts/`, `src/styles/fonts.css`)
+  - [x] #15 `UiButton`, `UiIconButton`
+  - [x] #17 `UiInput`, `UiField` + de auth-schermen
+  - [x] #18 `UiDialog` (nieuw lijstje, verwijderbevestiging)
+  - [x] #19 `UiSpinner` + laadscherm
+  - [x] #20 header, accountmenu, `SyncIndicator`, `UiEyebrow`
+  - [x] #21 lijstkaarten
+  - [x] #22 lijstdetail, item-rij, `UiCheck`
+  - [x] #23 pull-to-refresh
+  - [x] #24 `src/styles.css` en de laag `legacy` verwijderd; app-shell en schermwissel als utilities (`v-show` + `animate-fade`); stijlregels in `AGENTS.md` §9; `CACHE_VERSION` naar `lijstjes-v3`; alle schermen pixelgelijk aan `master` (desktop, 360px en met gesimuleerde safe-area)
+  - [ ] #24 op een apparaat: notch en home-indicator in de PWA (iOS) en de Android-app
