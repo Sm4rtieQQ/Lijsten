@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 
 import { registerBackHandler } from "../../composables/useBackNavigation";
+import UiEyebrow from "./UiEyebrow.vue";
 import UiIconButton from "./UiIconButton.vue";
 
 /**
@@ -125,10 +126,9 @@ function onClick(event: MouseEvent): void {
       >
         &times;
       </UiIconButton>
-      <!-- De oude `.eyebrow` blijft tot UiEyebrow er is (GitHub-issue #20). -->
-      <p v-if="$slots.eyebrow" class="eyebrow">
+      <UiEyebrow v-if="$slots.eyebrow" class="mb-[7px]">
         <slot name="eyebrow" />
-      </p>
+      </UiEyebrow>
       <h2 :id="titleId" :class="sizes[size].title">
         <slot name="title" />
       </h2>

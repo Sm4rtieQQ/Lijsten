@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import UiEyebrow from "./ui/UiEyebrow.vue";
+
 /** Gedeelde kaart voor de auth-schermen: eyebrow + `Lijstjes` + vinkje. */
 defineProps<{ eyebrow: string }>();
 </script>
@@ -10,8 +12,7 @@ defineProps<{ eyebrow: string }>();
     >
       <div class="mb-[18px] flex items-center justify-between">
         <div>
-          <!-- `.eyebrow` blijft tot UiEyebrow er is (GitHub-issue #20). -->
-          <p class="eyebrow mb-[5px]">{{ eyebrow }}</p>
+          <UiEyebrow class="mb-[5px]">{{ eyebrow }}</UiEyebrow>
           <h1 class="mb-[13px]">Lijstjes</h1>
         </div>
         <div

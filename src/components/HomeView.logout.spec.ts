@@ -46,7 +46,7 @@ describe("HomeView — uitloggen met niet-verstuurde wijzigingen (AGENTS.md §7.
   it("alles verstuurd → logt meteen uit", async () => {
     mockFlushBeforeSignOut.mockResolvedValue(true);
     wrapper = await openMenu();
-    await wrapper.get(".panel-logout").trigger("click");
+    await wrapper.get('[data-testid="logout"]').trigger("click");
     await flushPromises();
     expect(mockSignOut).toHaveBeenCalledOnce();
   });
@@ -54,14 +54,14 @@ describe("HomeView — uitloggen met niet-verstuurde wijzigingen (AGENTS.md §7.
   it("niet alles verstuurd → eerst bevestigen, de tweede klik logt uit", async () => {
     mockFlushBeforeSignOut.mockResolvedValue(false);
     wrapper = await openMenu();
-    const logout = wrapper.get(".panel-logout");
+    const logout = wrapper.get('[data-testid="logout"]');
 
     await logout.trigger("click");
     await flushPromises();
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(logout.text()).toBe("Toch uitloggen");
     expect(logout.attributes("aria-pressed")).toBe("true");
-    expect(wrapper.get(".panel-note").text()).toContain(
+    expect(wrapper.get('[role="status"]').text()).toContain(
       "Niet alle wijzigingen zijn verstuurd",
     );
 
@@ -74,7 +74,7 @@ describe("HomeView — uitloggen met niet-verstuurde wijzigingen (AGENTS.md §7.
   it("menu sluiten heft de bevestiging op", async () => {
     mockFlushBeforeSignOut.mockResolvedValue(false);
     wrapper = await openMenu();
-    await wrapper.get(".panel-logout").trigger("click");
+    await wrapper.get('[data-testid="logout"]').trigger("click");
     await flushPromises();
     await wrapper
       .get('button[aria-label="Account en acties"]')
@@ -82,9 +82,9 @@ describe("HomeView — uitloggen met niet-verstuurde wijzigingen (AGENTS.md §7.
     await wrapper
       .get('button[aria-label="Account en acties"]')
       .trigger("click"); // weer open
-    expect(wrapper.get(".panel-logout").attributes("aria-pressed")).toBe(
-      "false",
-    );
-    expect(wrapper.find(".panel-note").exists()).toBe(false);
+    expect(
+      wrapper.get('[data-testid="logout"]').attributes("aria-pressed"),
+    ).toBe("false");
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
   });
 });

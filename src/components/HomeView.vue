@@ -13,6 +13,7 @@ import SyncIndicator from "./SyncIndicator.vue";
 import UiButton from "./ui/UiButton.vue";
 import UiDialog from "./ui/UiDialog.vue";
 import UiInput from "./ui/UiInput.vue";
+import UiEyebrow from "./ui/UiEyebrow.vue";
 import UiIconButton from "./ui/UiIconButton.vue";
 import type { List } from "../types/app";
 
@@ -134,6 +135,22 @@ async function onLogout(): Promise<void> {
   else armLogout(LOGOUT_KEY);
 }
 
+/** Accountmenu (§8.8): paneel en menu-items. Uitloggen gewapend volgt §8.6. */
+const menu = {
+  panel:
+    "absolute top-12 right-0 z-5 grid w-[210px] gap-1 rounded-popover border border-line bg-surface p-3 shadow-popover",
+  action:
+    "rounded-lg px-2 py-[10px] text-left hover:bg-accent-soft hover:text-accent-dark",
+  add: "text-[14px] font-bold text-accent",
+  /* Ruimte en een dunne lijn tussen '+ Nieuw lijstje' en het Account-blok. */
+  divider: "mx-2 mt-[10px] border-t border-line pt-[10px]",
+  email:
+    "overflow-hidden px-2 pt-[2px] pb-1 text-[10px] text-ellipsis text-muted",
+  note: "mx-2 mt-1 text-[10px] leading-[1.4] text-accent-dark",
+  logout:
+    "text-[10px] text-muted disabled:cursor-default disabled:opacity-60 aria-pressed:bg-accent aria-pressed:font-bold aria-pressed:text-white aria-pressed:hover:bg-accent-dark aria-pressed:hover:text-white",
+} as const;
+
 // --- Slepen (lijsten herschikken, §8.15): pointer-events + zwevende kopie ---
 const {
   draggingId,
@@ -164,14 +181,17 @@ const ghostStyle = computed(() =>
 
 <template>
   <section class="view">
-    <header class="topbar">
-      <div class="topbar-title">
-        <h1>Mijn lijstjes</h1>
-        <p class="eyebrow below-title">OVERZICHT</p>
+    <header class="mb-9 flex items-start justify-between">
+      <div class="min-w-0">
+        <!-- Ruimte onder het h1 houdt de descender van de 'j' heel (§8.10). -->
+        <h1 class="overflow-hidden pb-[9px] text-ellipsis whitespace-nowrap">
+          Mijn lijstjes
+        </h1>
+        <UiEyebrow>OVERZICHT</UiEyebrow>
       </div>
-      <div class="topbar-right">
+      <div class="flex items-center gap-1">
         <SyncIndicator />
-        <div class="home-actions" ref="accountRef">
+        <div ref="accountRef" class="relative flex items-center gap-[14px]">
           <UiIconButton
             ref="accountButtonRef"
             label="Account en acties"
@@ -183,27 +203,31 @@ const ghostStyle = computed(() =>
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </UiIconButton>
-          <div class="account-panel" :hidden="!accountOpen" id="account-panel">
+          <div id="account-panel" :class="menu.panel" :hidden="!accountOpen">
             <button
-              class="panel-action panel-add"
+              :class="[menu.action, menu.add]"
               type="button"
+              data-testid="new-list"
               @click="openNewListDialog"
             >
               + Nieuw lijstje
             </button>
-            <p class="eyebrow panel-header">Account</p>
-            <span class="current-user-email">{{ user?.email }}</span>
+            <div :class="menu.divider">
+              <UiEyebrow size="sm">Account</UiEyebrow>
+            </div>
+            <span :class="menu.email">{{ user?.email }}</span>
             <p
               v-if="isLogoutArmed(LOGOUT_KEY)"
-              class="panel-note"
+              :class="menu.note"
               role="status"
             >
               Niet alle wijzigingen zijn verstuurd. Ze gaan verloren als je nu
               uitlogt.
             </p>
             <button
-              class="panel-action panel-logout"
+              :class="[menu.action, menu.logout]"
               type="button"
+              data-testid="logout"
               :disabled="loggingOut"
               :aria-pressed="isLogoutArmed(LOGOUT_KEY) ? 'true' : 'false'"
               :aria-label="
