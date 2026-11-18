@@ -32,6 +32,10 @@
   --color-accent-line: #e7b69d;
   --color-icon: #aa9e91;
   --color-disabled: #c6bdb3;
+  /* Lijstkaarten (GitHub-issue #21): de hoverrand van een kaart en de
+     gestippelde rand van de lege staat. */
+  --color-line-hover: #e2b49c;
+  --color-line-dashed: #d7c5b0;
 
   --font-sans: "DM Sans", sans-serif;
   --font-display: "Playfair Display", serif;

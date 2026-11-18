@@ -111,21 +111,23 @@ describe("HomeView — slepen met zwevende kopie (AGENTS.md §8.15)", () => {
     lists.value = [createList("Boodschappen"), createList("Klussen")];
     wrapper = mount(HomeView, { attachTo: document.body });
 
-    const handle = wrapper.get(".list-drag-handle").element;
+    const handle = wrapper.get("[data-drag-handle]").element;
     handle.dispatchEvent(pointer("pointerdown", 0));
     window.dispatchEvent(pointer("pointermove", 80));
     await wrapper.vm.$nextTick();
 
-    const copy = document.querySelector(".drag-ghost .list-card");
+    const copy = document.querySelector("[data-drag-ghost] article");
     expect(copy?.textContent).toContain("Boodschappen");
     expect(copy?.hasAttribute("data-drag-id")).toBe(false);
-    expect(wrapper.findAll(".list-card")[0]?.classes()).toContain("dragging");
+    expect(
+      wrapper.findAll("[data-drag-id]")[0]?.attributes("data-dragging"),
+    ).toBeDefined();
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await wrapper.vm.$nextTick();
-    expect(document.querySelector(".drag-ghost")).toBeNull();
-    expect(wrapper.findAll(".list-card")[0]?.classes()).not.toContain(
-      "dragging",
-    );
+    expect(document.querySelector("[data-drag-ghost]")).toBeNull();
+    expect(
+      wrapper.findAll("[data-drag-id]")[0]?.attributes("data-dragging"),
+    ).toBeUndefined();
   });
 });
