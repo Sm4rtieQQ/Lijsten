@@ -38,6 +38,18 @@
   --color-line-dashed: #d7c5b0;
   /* Dialogen (GitHub-issue #18): de waas achter een modale dialoog. */
   --color-scrim: #3c2b1f47;
+  /* Lijstdetail (GitHub-issue #22): de rand van het vinkje, de item-rij
+     (rand, achtergrond, hover), het invoerformulier, de placeholder, de
+     afgevinkte tekst en de tekst van een leeg lijstje. */
+  --color-check-line: #c8b9aa;
+  --color-row-line: #eaded0;
+  --color-row-line-hover: #e6d9ca;
+  --color-row: rgba(255, 253, 250, 0.42);
+  --color-row-hover: #fffdfa75;
+  --color-form-line: #dfd0be;
+  --color-placeholder: #b2a79b;
+  --color-done: #aaa198;
+  --color-empty: #aaa095;
 
   --font-sans: "DM Sans", sans-serif;
   --font-display: "Playfair Display", serif;
@@ -61,6 +73,7 @@
   --shadow-panel: 0 15px 42px rgba(75, 50, 29, 0.08);
   --shadow-ghost: 0 14px 30px rgba(52, 46, 42, 0.18);
   --shadow-focus: 0 0 0 3px #e66d351a;
+  --shadow-form: 0 5px 13px #5d412109;
 
   /* De keyframes staan in main.css (de oude CSS noemt ze bij naam). */
   --animate-fade: fade 0.22s ease both;

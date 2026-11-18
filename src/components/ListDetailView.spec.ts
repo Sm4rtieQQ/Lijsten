@@ -8,6 +8,7 @@ import { createList, createListItem, type ListItem } from "../types/app";
 
 const { lists, activeListId, setActiveList } = useLists();
 const CLEAR = '[data-testid="clear-completed"]';
+const EDIT_INPUT = 'input[aria-label^="Pas item aan"]';
 
 /** Zet één lijst met de gegeven items klaar en opent die als actieve lijst. */
 function seed(items: ListItem[]): void {
@@ -84,11 +85,11 @@ describe("ListDetailView — Android-terugknop (AGENTS.md §8.13)", () => {
     seed([item("Melk", false)]);
     wrapper = mount(ListDetailView);
     await wrapper.get('button[aria-label="Item aanpassen"]').trigger("click");
-    expect(wrapper.find("input.item-text").exists()).toBe(true);
+    expect(wrapper.find(EDIT_INPUT).exists()).toBe(true);
 
     expect(handleBack()).toBe(true);
     await wrapper.vm.$nextTick();
-    expect(wrapper.find("input.item-text").exists()).toBe(false);
+    expect(wrapper.find(EDIT_INPUT).exists()).toBe(false);
     expect(activeListId.value).not.toBeNull();
 
     expect(handleBack()).toBe(true);
@@ -112,6 +113,46 @@ describe("ListDetailView — item bewerken", () => {
     wrapper = mount(ListDetailView, { attachTo: document.body });
     await wrapper.get('button[aria-label="Item aanpassen"]').trigger("click");
     await flushPromises();
-    expect(document.activeElement).toBe(wrapper.get("input.item-text").element);
+    expect(document.activeElement).toBe(wrapper.get(EDIT_INPUT).element);
+  });
+});
+
+describe("ListDetailView — titel", () => {
+  let wrapper: VueWrapper | undefined;
+  afterEach(() => {
+    wrapper?.unmount();
+    lists.value = [];
+    setActiveList(null);
+  });
+
+  const TITLE = 'input[aria-label="Naam van het lijstje"]';
+
+  /** Typt in het veld zoals een gebruiker: waarde zetten + `input`. */
+  async function type(text: string): Promise<HTMLInputElement> {
+    const input = wrapper!.get(TITLE);
+    const el = input.element as HTMLInputElement;
+    el.value = text;
+    await input.trigger("input");
+    return el;
+  }
+
+  it("toont de titel en volgt een nieuwe naam van de lijst", async () => {
+    seed([]);
+    wrapper = mount(ListDetailView);
+    const el = wrapper.get(TITLE).element as HTMLInputElement;
+    expect(el.value).toBe("Boodschappen");
+
+    lists.value = lists.value.map((list) => ({ ...list, title: "Markt" }));
+    await flushPromises();
+    expect(el.value).toBe("Markt");
+  });
+
+  it("zet een lege titel bij change terug naar de huidige naam", async () => {
+    seed([]);
+    wrapper = mount(ListDetailView);
+    const el = await type("   ");
+    await wrapper.get(TITLE).trigger("change");
+    expect(el.value).toBe("Boodschappen");
+    expect(lists.value[0]?.title).toBe("Boodschappen");
   });
 });

@@ -90,7 +90,7 @@ Lijsten/
 │   │   ├── AuthCard.vue          # Gedeelde kaart van de auth-schermen
 │   │   ├── PasswordInput.vue     # Wachtwoordveld met oog-toggle
 │   │   ├── icons/                # Gedeelde SVG-iconen (sleephandvat, prullenbak)
-│   │   ├── ui/                   # Tailwind-primitives: UiButton, UiIconButton, UiSpinner, UiField, UiInput, UiDialog, UiEyebrow
+│   │   ├── ui/                   # Tailwind-primitives: UiButton, UiCheck, UiIconButton, UiSpinner, UiField, UiInput, UiDialog, UiEyebrow
 │   │   ├── SplashView.vue        # Laadscherm (staat bij het opstarten)
 │   │   ├── LoginView.vue         # Inloggen + knop Registreren
 │   │   ├── RegisterView.vue      # Open registratie (zonder token)
@@ -286,7 +286,7 @@ Bij klikken op "verwijder lijst" (per kaart) opent een **bevestigingsmodal/dialo
 
 - Wanneer een item als `done = true` wordt opgeslagen, wordt het visueel weergegeven als afgerond (bestaande stijl behouden: `text-decoration: line-through`, grijs etc.).
 - De app zelf slaat **geen** `[x]` prefix op in de `text` — de UI rendert alleen de visuele status.
-- De checkboxes op de detailpagina zijn **vierkant met afgeronde hoeken**, in dezelfde radius-stijl als de andere knoppen in de app (dus **niet** `border-radius: 50%`).
+- De checkboxes op de detailpagina zijn **vierkant met afgeronde hoeken**, in dezelfde radius-stijl als de andere knoppen in de app (dus **niet** `border-radius: 50%`). Dat is `UiCheck` met `rounded-check`; de toestand staat in `data-checked`, de rij in `data-done`.
 
 ### 8.6 Items verwijderen via dubbele input
 
@@ -388,7 +388,7 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 
 ### 8.15 Slepen met een zwevende kopie
 
-- Lijsten (overzicht) en items (detail) worden herschikt door het **sleephandvat** vast te pakken. Daarna volgt een **zwevende kopie** van de hele kaart of het hele item de vinger/muis (`position: fixed`, lichte kanteling en schaduw). Het origineel blijft als half-transparante placeholder staan (`data-dragging`; bij items nog `.dragging`); een oranje lijn toont waar hij landt: naar beneden slepen → onder het doel (`data-drop="after"`; bij items nog `.drop-after`), naar boven → erboven (`data-drop="before"`).
+- Lijsten (overzicht) en items (detail) worden herschikt door het **sleephandvat** vast te pakken. Daarna volgt een **zwevende kopie** van de hele kaart of het hele item de vinger/muis (`position: fixed`, lichte kanteling en schaduw). Het origineel blijft als half-transparante placeholder staan (`data-dragging`); een oranje lijn toont waar hij landt: naar beneden slepen → onder het doel (`data-drop="after"`), naar boven → erboven (`data-drop="before"`).
 - **Pointer-events, geen HTML5 drag & drop.** HTML5-DnD toont als sleepbeeld alleen het handvat en werkt op Android (touch) onbetrouwbaar. De logica staat in `useDragReorder` (sleep pas na 4 px beweging, doel via `elementFromPoint` + `data-drag-id`, automatisch scrollen bij de schermrand, ESC en `pointercancel` breken af). Bij loslaten `moveId` → `reorderLists`/`reorderItems`; de outbox is ongewijzigd (`list.reorder`/`item.reorder`).
 - De kopie is dezelfde component (`ListCard.vue` / `ItemRow.vue` met `ghost`), via `Teleport` in `<body>`, met `aria-hidden`, `inert` en `pointer-events: none` en **zonder** `data-drag-id`, zodat hij nooit als doel telt. Geen gekloonde DOM-nodes (§5).
 - `touch-action: none` staat **alleen op het handvat**: elders blijven scrollen en de swipe omlaag (§8.14) gewoon werken.
@@ -401,7 +401,7 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Touch targets:** minimaal 44x44px waar praktisch mogelijk (behoud UX).
 - **Tailwind-migratie (loopt, GitHub-issues #13–#24):** de styling gaat stap voor stap over naar Tailwind CSS v4. Tokens staan in `src/styles/tokens.css` (`@theme`, geen standaardpalet: alleen de eigen kleuren bestaan). `src/styles/main.css` is de ingang en importeert de oude `src/styles.css` in de laag `legacy`, zodat utilities altijd winnen. Elke migratiestap houdt het uiterlijk gelijk (vergelijk met screenshots van vóór de wijziging, desktop en 360px) en verwijdert de vervangen oude regels. Importeer nooit CSS zonder laag. De volledige stijlregels volgen in #24; tot dan geldt de rest van deze sectie voor de oude CSS.
 - **CSS:** hergebruik bestaande stijl waar mogelijk. De oude CSS staat in `src/styles.css` en komt binnen via `src/styles/main.css` (laag `legacy`); `main.ts` importeert alleen `main.css`. Houd dezelfde look & feel. DM Sans en Playfair Display staan zelf gehost in `src/assets/fonts/` (woff2 + OFL) met `@font-face` in `src/styles/fonts.css`; gebruik daar altijd relatieve `url()` (de app draait onder `./` en onder `/Lijsten/`). Geen Google Fonts-link.
-- **Bronvolgorde in `styles.css`:** latere regels met dezelfde selector winnen. Er staan dubbele definities (o.a. `.check-button`); bij het wijzigen van zo'n regel **allebei** aanpassen, anders blijft de oude waarde de baas.
+- **Bronvolgorde in `styles.css`:** latere regels met dezelfde selector winnen. De dubbele definities zijn met de Tailwind-migratie verdwenen; voeg er geen nieuwe toe.
 - **Comments:** alleen waar nodig om complexe logica uit te leggen (niet overbodig).
 - **Git:** commit per afgeronde taak waar zinvol. `.gitignore` bevat `node_modules/`, `dist/`, `.env`, `.DS_Store`, Android build-artifacts, `*.keystore`, `*.jks` en `*.apk`.
 
@@ -539,6 +539,6 @@ Een taak is pas afgerond als:
 - **NIET** een tweede "je account is bevestigd"-mail beloven; die bestaat niet in de standaard Supabase-templates (de bevestiging gebeurt in de app).
 - **NIET** ruwe foutmeldingen (`TypeError`, stack traces, databasefouten) aan de gebruiker tonen.
 - **NIET** `window.confirm` of een dialog gebruiken om items te verwijderen — dat is de twee-staps knop (§8.6).
-- **NIET** `border-radius: 50%` op de item-checkbox; die is vierkant met afgeronde hoeken.
+- **NIET** `border-radius: 50%` of `rounded-full` op de item-checkbox; die is vierkant met afgeronde hoeken.
 - **NIET** vóór akkoord van de gebruiker Android-builds/exports starten.
 - **NIET** `[x]` zetten voordat de taak aantoonbaar af is.
