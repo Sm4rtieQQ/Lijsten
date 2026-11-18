@@ -67,21 +67,32 @@ const indicatorStyle = computed(() => ({
 const spinnerStyle = computed(() =>
   refreshing.value ? {} : { transform: `rotate(${progress.value * 270}deg)` },
 );
+
+/**
+ * Eén toestand voor de stijl: `pulling` (vinger volgt direct), `ready`
+ * (voorbij de drempel: loslaten synchroniseert), `refreshing` (sync loopt).
+ */
+const state = computed(() => {
+  if (refreshing.value) return "refreshing";
+  if (!pulling.value) return "idle";
+  return progress.value >= 1 ? "ready" : "pulling";
+});
 </script>
 
 <template>
   <!-- Altijd aanwezig (onzichtbaar boven het scherm bij afstand 0), zodat hij
-       na loslaten vloeiend terugveert. Geen klikdoel: pointer-events none. -->
+       na loslaten vloeiend terugveert. Geen klikdoel: pointer-events none.
+       Transform en opacity staan inline: ze volgen de vinger per frame. -->
   <div
-    class="pull-indicator"
-    :class="{
-      'is-pulling': pulling,
-      'is-ready': progress >= 1,
-      'is-refreshing': refreshing,
-    }"
+    data-testid="pull-indicator"
+    :data-state="state"
+    class="group pointer-events-none fixed top-safe-top left-1/2 z-40 grid size-9 place-items-center rounded-full bg-surface shadow-[0_4px_14px_rgba(52,46,42,0.16)] transition-[transform,opacity] duration-200 ease-[ease] data-[state=pulling]:transition-none data-[state=ready]:transition-none motion-reduce:transition-none"
     :style="indicatorStyle"
     aria-hidden="true"
   >
-    <span class="pull-spinner" :style="spinnerStyle" />
+    <span
+      class="size-[18px] rounded-full border-2 border-accent/28 border-t-accent group-data-[state=ready]:border-r-accent group-data-[state=refreshing]:animate-spin-fast group-data-[state=refreshing]:border-r-accent"
+      :style="spinnerStyle"
+    />
   </div>
 </template>
