@@ -10,14 +10,17 @@ import { computed, ref } from "vue";
  * - `ghost-round`: 44px rond, de oude `.card-delete`;
  * - `close`: 31px rond met een `&times;`, de oude `.dialog-close`
  *   (de gebruiker positioneert hem, bv. `absolute`);
- * - `solid`: oranje, de oude `.add-item-button` (rekt mee in hoogte).
+ * - `solid`: oranje, de oude `.add-item-button` (rekt mee in hoogte);
+ * - `field`: 31px, in een tekstveld, de oude oog-knop van `.password-field`
+ *   (de gebruiker positioneert hem, bv. `absolute`).
  *
  * Kleiner dan 44px krijgt een onzichtbaar groter klikvlak (§9, touch
  * targets). `armed` werkt als bij `UiButton` (§8.6). `reveal` toont de
  * knop op brede schermen met muis pas bij hover over de `group` eromheen
  * of bij focus; op smalle schermen, op touch en gewapend altijd.
  */
-type Variant = "outline" | "ghost" | "ghost-round" | "close" | "solid";
+type Variant =
+  "outline" | "ghost" | "ghost-round" | "close" | "solid" | "field";
 
 const props = withDefaults(
   defineProps<{
@@ -50,6 +53,7 @@ const variants: Record<Variant, string> = {
   close: `size-[31px] rounded-full text-[26px] leading-none text-muted hover:bg-paper hover:text-ink ${hitArea} after:inset-[-6.5px]`,
   solid:
     "grid w-[45px] place-items-center rounded-control bg-accent text-white hover:bg-accent-dark [&_svg]:w-6",
+  field: `size-[31px] rounded-[7px] p-[7px] text-muted hover:bg-accent-soft hover:text-accent [&_svg]:size-full ${hitArea} after:inset-[-6.5px]`,
 };
 
 /** Gewapend (§8.6): oranje met wit icoon, ook bij hover en zonder hover. */
