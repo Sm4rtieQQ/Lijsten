@@ -3,6 +3,24 @@
 Alle noemenswaardige wijzigingen aan Lijstjes, nieuwste bovenaan.
 Notatie: versienummer = `package.json` / Android `versionName` (`versionCode`).
 
+## [1.5.1] — 2026-11-18
+
+**Oud:** 1.5.0 — `versionName "1.5"` (`versionCode 5`)
+**Nieuw:** 1.5.1 — `versionName "1.5.1"` (`versionCode 6`)
+
+### Weergave
+
+- De sync-pill bedekt de titel niet meer. Op de lijstpagina staat hij naast `Alle lijstjes`, in
+  het overzicht naast `OVERZICHT`.
+- `Mijn lijstjes` wordt op een smal scherm niet meer afgekapt.
+- Een lijsttitel is nu maximaal 24 tekens. Lange titels worden kleiner weergegeven, zodat ze op
+  één regel passen. Bestaande langere titels blijven werken en eindigen op `…`.
+
+### App-icoon
+
+- Het lijstje in het app-icoon is kleiner en valt niet meer weg in de ronde hoeken van
+  sommige telefoons. Ook het icoon op iPhone en in de webapp is iets kleiner.
+
 ## [1.5.0] — 2026-11-18
 
 **Oud:** 1.4.0 — `versionName "1.4"` (`versionCode 4`)
