@@ -53,7 +53,8 @@ let offBack: (() => void) | null = null;
 
 function show(): void {
   const el = dialogEl.value;
-  if (!el || el.open) return;
+  // `show` loopt een tick later: is `open` intussen weer dicht, dan niet openen.
+  if (!el || el.open || !open.value) return;
   el.showModal();
   // Eenmalige focus op het invoerveld (§5 staat dit toe; §8.3).
   el.querySelector<HTMLElement>("[autofocus]")?.focus();
