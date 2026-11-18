@@ -3,6 +3,8 @@ import { nextTick, onMounted, reactive, ref } from "vue";
 
 import AuthCard from "./AuthCard.vue";
 import UiButton from "./ui/UiButton.vue";
+import UiField from "./ui/UiField.vue";
+import UiInput from "./ui/UiInput.vue";
 import PasswordInput from "./PasswordInput.vue";
 import { useAuth } from "../composables/useAuth";
 import { validateNewPassword } from "../lib/validation";
@@ -52,9 +54,8 @@ onMounted(async () => {
 
 <template>
   <AuthCard eyebrow="NIEUW WACHTWOORD">
-    <form class="login-form" novalidate @submit.prevent="onSubmit">
-      <label>
-        Nieuw wachtwoord
+    <form class="grid gap-[15px]" novalidate @submit.prevent="onSubmit">
+      <UiField label="Nieuw wachtwoord">
         <PasswordInput
           ref="firstInput"
           v-model="form.password"
@@ -64,18 +65,23 @@ onMounted(async () => {
           aria-label="Nieuw wachtwoord"
           aria-describedby="reset-message"
         />
-      </label>
-      <label>
-        Wachtwoord herhalen
-        <input
+      </UiField>
+      <UiField label="Wachtwoord herhalen">
+        <UiInput
           v-model="form.repeat"
           type="password"
           autocomplete="new-password"
           minlength="6"
           aria-label="Wachtwoord herhalen"
         />
-      </label>
-      <p id="reset-message" class="login-message" aria-live="polite">
+      </UiField>
+      <p
+        id="reset-message"
+        data-testid="auth-message"
+        role="status"
+        aria-live="polite"
+        class="min-h-[18px] text-[13px] text-accent"
+      >
         {{ form.message }}
       </p>
       <UiButton type="submit" block class="mt-[25px]" :disabled="busy">

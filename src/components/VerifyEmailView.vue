@@ -67,9 +67,9 @@ onBeforeUnmount(stopCooldown);
 
 <template>
   <AuthCard eyebrow="BEVESTIG JE E-MAIL">
-    <p class="login-copy">{{ notice }}</p>
+    <p class="mb-6 leading-[1.5] text-muted">{{ notice }}</p>
 
-    <p class="login-note">
+    <p class="mt-[19px] text-[12px] leading-[1.5] text-muted">
       De mail kan even op zich laten wachten of in de spam belanden. Komt er
       niets aan? Vraag hieronder een nieuwe link aan.
     </p>
@@ -88,7 +88,14 @@ onBeforeUnmount(stopCooldown);
       }}
     </UiButton>
 
-    <p class="login-message" aria-live="polite">{{ message }}</p>
+    <p
+      data-testid="auth-message"
+      role="status"
+      aria-live="polite"
+      class="min-h-[18px] text-[13px] text-accent"
+    >
+      {{ message }}
+    </p>
 
     <UiButton
       variant="text"
