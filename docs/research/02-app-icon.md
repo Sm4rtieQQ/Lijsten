@@ -18,12 +18,14 @@ Beige hex: icon background is `#D9C6B0` (everywhere: SVGs, Android values, vecto
 - There are no `mipmap-*dpi` PNGs, so API 24/25 devices have no legacy mipmap fallback (`@mipmap/ic_launcher` would have no resource below v26 either; `mipmap-anydpi-v26` only applies to 26+).
 - Not set: `<monochrome>` (Android 13 themed icons), so themed-icon mode falls back to a legacy-style tile.
 - The foreground glyph spans x 25-83, y 22-86 of 108; the adaptive safe zone is the central 66dp (21-87), so the glyph fits.
+  - **Correction (#45):** wrong. The safe zone is a 66dp *circle* (radius 33dp), not a square. The glyph's rounded corners reach 40.7dp from the centre, so circle-mask launchers cut them off. Fixed in #45 by scaling the foreground glyph to 0.75 (corners at 30.5dp).
 - Splash: `res/drawable/splash.png` and variants are white (pixel 0,0 = 255,255,255), referenced by `AppTheme.NoActionBarLaunch` (`styles.xml`). This is a separate white surface (launch screen), not the icon; mention only so the user knows if "white" is also seen there.
 
 ### PWA (Chrome/Android install, desktop)
 
 - `public/manifest.webmanifest`: icons 192 and 512 `purpose: any`, 512 `purpose: maskable`; `background_color`/`theme_color` `#f7f1e8`.
 - `public/icons/icon.svg` and `icon-maskable.svg` both start with a full-bleed `<rect fill="#d9c6b0">`; glyph scaled 0.8 (any) / 1.25 (maskable, note: 1.25 enlarges the glyph rather than adding safe-zone padding; glyph then spans about x 17-91 and may clip under a circular mask; unverified visually).
+  - **Update (#45):** the scales were swapped since: `icon-maskable.svg` is now 0.8 (inside the 80% safe circle) and `icon.svg` ("any"/iOS) went from 1.25 to 1.1 in #45.
 - Rasterised PNGs verified with ImageMagick: all four (`icon-192`, `icon-512`, `icon-512-maskable`, `apple-touch-icon`) have opaque `#D9C6B0` at pixel (0,0) and no alpha. So the PNGs are already full-bleed beige.
 - Chrome on Android picks the maskable icon when present, else wraps `any` icons in a white circle/square backdrop. The manifest has a maskable entry, so a correct PWA install should already be full beige; if the user's PWA still shows white, it is likely a stale installed copy or old cache (sw.js `CACHE_VERSION = "lijstjes-v1"`, `public/sw.js:11`, precaches icons at `:17-21`).
 - `public/favicon.svg`: transparent, glyph only (no beige). In a browser tab this shows the glyph on the tab background; it is not a launcher icon. Optional to add the beige rect.

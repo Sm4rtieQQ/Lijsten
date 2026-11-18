@@ -8,7 +8,7 @@
  * Verhoog CACHE_VERSION bij een release waarin de app-shell verandert, zodat
  * oude caches worden opgeruimd.
  */
-const CACHE_VERSION = "lijstjes-v3";
+const CACHE_VERSION = "lijstjes-v4";
 
 const APP_SHELL = [
   "./",
