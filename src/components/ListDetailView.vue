@@ -201,8 +201,9 @@ function onClearCompleted(): void {
 <template>
   <section class="animate-fade">
     <template v-if="activeListId && list">
-      <header class="mb-[18px] flex items-start justify-between gap-4">
-        <div class="relative min-w-0 flex-1">
+      <!-- De titel krijgt de hele rij; de pill staat in de rij eronder (§7.4). -->
+      <header class="mb-[18px]" data-testid="title-row">
+        <div class="relative min-w-0">
           <!-- De oranje lijn groeit mee zolang de titel focus heeft. -->
           <UiInput
             v-model="titleDraft"
@@ -217,10 +218,12 @@ function onClearCompleted(): void {
             class="absolute bottom-0 left-0 h-[3px] w-[46px] rounded-[4px] bg-accent transition-all duration-200 ease-[ease] peer-focus:w-full"
           ></span>
         </div>
-        <SyncIndicator />
       </header>
 
-      <header class="mb-[25px] flex items-center justify-between">
+      <header
+        class="mb-[25px] flex items-center justify-between gap-4"
+        data-testid="back-row"
+      >
         <UiButton variant="text-muted" @click="goBack">
           <template #icon>
             <svg
@@ -233,6 +236,7 @@ function onClearCompleted(): void {
           </template>
           Alle lijstjes
         </UiButton>
+        <SyncIndicator />
       </header>
 
       <form

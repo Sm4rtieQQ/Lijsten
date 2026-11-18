@@ -156,3 +156,27 @@ describe("ListDetailView — titel", () => {
     expect(lists.value[0]?.title).toBe("Boodschappen");
   });
 });
+
+describe("ListDetailView — plek van de sync-pill (AGENTS.md §7.4)", () => {
+  let wrapper: VueWrapper | undefined;
+
+  afterEach(() => {
+    wrapper?.unmount();
+    lists.value = [];
+    setActiveList(null);
+  });
+
+  it("zet de pill in de rij van de terugknop, niet naast de titel", () => {
+    seed([]);
+    wrapper = mount(ListDetailView);
+    const titleRow = wrapper.get('[data-testid="title-row"]');
+    const backRow = wrapper.get('[data-testid="back-row"]');
+
+    expect(titleRow.find('[data-testid="sync-dot"]').exists()).toBe(false);
+    expect(
+      titleRow.find('input[aria-label="Naam van het lijstje"]').exists(),
+    ).toBe(true);
+    expect(backRow.find('[data-testid="sync-dot"]').exists()).toBe(true);
+    expect(backRow.text()).toContain("Alle lijstjes");
+  });
+});
