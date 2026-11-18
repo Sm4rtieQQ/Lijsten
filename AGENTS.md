@@ -209,7 +209,7 @@ Supabase-config gaat **niet** meer via `window.*`, maar via Vite env vars.
 
 ### 7.4 Sync-indicator (vereist)
 
-De **sync-interface** (`SyncIndicator.vue`) staat **rechtsboven** en is bewust **compact**: een kleine pill, geen blok. Zij staat in zowel het **overzicht** (`HomeView.vue`, naast het account-icoon) als de **detailweergave** (`ListDetailView.vue`, naast de terugknop) — dus op elk scherm op dezelfde plek.
+De **sync-interface** (`SyncIndicator.vue`) staat **rechts in de kop van de pagina** en is bewust **compact**: een kleine pill, geen blok. Zij staat in zowel het **overzicht** (`HomeView.vue`, rechtsboven naast het account-icoon) als de **detailweergave** (`ListDetailView.vue`, rechts in de rij van de terugknop 'Alle lijstjes', die **onder** de titel staat). Op de detailweergave staat de pill bewust **niet** naast de titel: de titel krijgt de hele rij, zodat een uitklappende pill het einde van de titel nooit meer afdekt (#46).
 
 - **Bezig (`syncing`) → alleen een spinner.** Geen tekst, geen kleur, geen tijd. De pill is dan niet klikbaar.
 - **Idle (`synced`) → groen**: groene dot + `Gesynchroniseerd`, met het tijdstip van de laatste succesvolle sync er naast.
