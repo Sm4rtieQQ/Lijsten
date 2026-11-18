@@ -27,13 +27,13 @@ describe("HomeView (accountmenu, AGENTS.md §8.8)", () => {
   it("toont het accountmenu in de exacte volgorde bij openen", async () => {
     wrapper = mount(HomeView);
     // Menu is standaard gesloten.
-    expect(wrapper.get(".account-panel").attributes("hidden")).toBeDefined();
+    expect(wrapper.get("#account-panel").attributes("hidden")).toBeDefined();
 
     await wrapper.get(ACCOUNT_BUTTON).trigger("click");
 
-    expect(wrapper.get(".account-panel").attributes("hidden")).toBeUndefined();
+    expect(wrapper.get("#account-panel").attributes("hidden")).toBeUndefined();
     const items = wrapper
-      .findAll(".account-panel > *")
+      .findAll("#account-panel > *")
       .map((el) => el.text().trim())
       .filter(Boolean);
     expect(items).toEqual([
@@ -61,7 +61,7 @@ describe("HomeView (accountmenu, AGENTS.md §8.8)", () => {
     expect(button.attributes("aria-expanded")).toBe("true");
     await button.trigger("click");
     expect(button.attributes("aria-expanded")).toBe("false");
-    expect(wrapper.get(".account-panel").attributes("hidden")).toBeDefined();
+    expect(wrapper.get("#account-panel").attributes("hidden")).toBeDefined();
   });
 });
 
@@ -75,7 +75,7 @@ describe("HomeView — Android-terugknop (AGENTS.md §8.13)", () => {
 
     expect(handleBack()).toBe(true);
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".account-panel").attributes("hidden")).toBeDefined();
+    expect(wrapper.get("#account-panel").attributes("hidden")).toBeDefined();
 
     // Niets meer open → niet afgehandeld (App minimaliseert dan de app).
     expect(handleBack()).toBe(false);

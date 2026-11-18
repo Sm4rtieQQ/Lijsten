@@ -52,7 +52,7 @@ describe("HomeView — dialogen (AGENTS.md §8.3, §8.13)", () => {
     await wrapper
       .get('button[aria-label="Account en acties"]')
       .trigger("click");
-    await wrapper.get(".panel-add").trigger("click");
+    await wrapper.get('[data-testid="new-list"]').trigger("click");
     await nextTick();
     await nextTick();
     return wrapper;

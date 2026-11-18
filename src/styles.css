@@ -16,33 +16,6 @@
 .view.active {
   display: block;
 }
-.topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 36px;
-}
-/* Titel en eyebrow mogen niet inkrimpen/omvallen; de rechterkant
-   (sync-indicator + account) neemt zijn eigen ruimte. */
-.topbar-title {
-  min-width: 0;
-}
-.topbar-title h1 {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Clip-ruimte voor de descender van de 'j' (F1): de inkvlek kan tot ~9px
-     onder de contentbox vallen zonder te worden afgeknipt; de eyebrow staat
-     daardoor zonder eigen bovenmarge direct onder het h1-doosje. */
-  padding-bottom: 9px;
-}
-.eyebrow {
-  margin: 0 0 7px;
-  color: var(--orange);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.45px;
-}
 .round-button {
   width: 48px;
   height: 48px;
@@ -66,162 +39,8 @@
   stroke-width: 2.3;
   stroke-linecap: round;
 }
-.panel-header {
-  /* Ruimte + subtiele lijn tussen '+ Nieuw lijstje' en het Account-blok (E-aanpassing). */
-  margin: 10px 8px 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  font-size: 10px;
-}
-.sync-indicator {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-.sync-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.sync-pill {
-  min-height: 18px;
-  min-width: 0;
-  padding: 0 7px;
-  border: 0;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  color: var(--muted);
-  background: transparent;
-  font-size: 8px;
-  font-weight: 600;
-  overflow: hidden;
-  max-width: 300px;
-  transition:
-    min-width 0.3s ease,
-    min-height 0.3s ease,
-    max-width 0.3s ease,
-    padding 0.3s ease,
-    background-color 0.18s ease,
-    color 0.18s ease;
-}
-.sync-label,
-.sync-time {
-  flex: none;
-  margin-left: 5px;
-  white-space: nowrap;
-  opacity: 1;
-}
 
-.sync-label {
-  max-width: 260px;
-  transition:
-    max-width 0.3s ease,
-    margin-left 0.3s ease,
-    opacity 0.3s ease;
-}
-
-.sync-time {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 7px;
-  font-variant-numeric: tabular-nums;
-  max-width: 120px;
-  transition:
-    max-width 0.3s ease,
-    margin-left 0.3s ease,
-    opacity 0.3s ease;
-}
-.sync-pill:hover:not(:disabled) {
-  background: #fffdfa;
-}
-.sync-pill:disabled {
-  padding: 0 4px;
-  cursor: default;
-}
-/* Ingeklapt: alleen de dot. Pill blijft minstens 16px breed,
-   zodat de lichtgroene achtergrond zichtbaar blijft rond de dot. */
-.sync-row.is-collapsed .sync-pill {
-  min-width: 16px;
-  min-height: 18px;
-  max-width: 18px;
-  padding: 0;
-  justify-content: center;
-}
-.sync-row.is-collapsed .sync-label {
-  max-width: 0;
-  margin-left: 0;
-  opacity: 0;
-}
-.sync-row.is-collapsed .sync-time {
-  max-width: 0;
-  margin-left: 0;
-  opacity: 0;
-}
-.sync-dot {
-  width: 4px;
-  height: 4px;
-  flex: none;
-  border-radius: 50%;
-  background: #2c6e49;
-}
-.sync-indicator[data-status="synced"] .sync-pill {
-  color: #2c6e49;
-  background: #e4efe8;
-}
-.sync-indicator[data-status="pending"] .sync-pill {
-  color: #8a6d1a;
-  background: #fdf3d8;
-}
-.sync-indicator[data-status="pending"] .sync-dot {
-  background: #d9a92a;
-}
-.sync-indicator[data-status="error"] .sync-pill {
-  color: #a3382f;
-  background: #f6dddd;
-}
-.sync-indicator[data-status="error"] .sync-dot {
-  background: #a3382f;
-}
-/* Klikzone (§7.4/§9): een transparante rand van 13px maakt de pill — ook
-   ingeklapt tot alleen de dot — minstens 44×44 px raakbaar, zonder dat hij
-   groter oogt. De negatieve marge houdt de lay-out gelijk; de achtergrond
-   blijft binnen de padding-box. Maten = oude maat + 2 × 13px. */
-.sync-pill {
-  border: 13px solid transparent;
-  margin: -13px;
-  min-height: 44px;
-  max-width: 326px;
-}
-.sync-row.is-collapsed .sync-pill {
-  min-width: 42px;
-  min-height: 44px;
-  max-width: 44px;
-}
-/* Ná de status- en hover-regels: hun `background`-shorthand zet de clip terug. */
-.sync-indicator .sync-pill,
-.sync-indicator[data-status] .sync-pill,
-.sync-indicator .sync-pill:hover:not(:disabled) {
-  background-clip: padding-box;
-}
-.sync-pill:focus-visible {
-  outline-offset: -13px;
-}
-.sync-spinner {
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid rgba(230, 109, 53, 0.28);
-  border-top-color: var(--orange);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-/* Zelfde opbouw als de topbar op het overzicht: titel links, indicator rechts. */
+/* Zelfde opbouw als de header van het overzicht (HomeView.vue): titel links, indicator rechts. */
 .detail-topbar {
   display: flex;
   align-items: flex-start;
@@ -392,60 +211,6 @@
   text-align: center;
   font-size: 14px;
 }
-.below-title {
-  /* Geen eigen bovenmarge meer: de ruimte zit nu in `padding-bottom` van het
-     h1 (F1), zodat een diepe descender nooit achter de eyebrow verdwijnt. */
-  margin: 0;
-}
-.home-actions {
-  position: relative;
-}
-.account-panel {
-  position: absolute;
-  z-index: 5;
-  top: 48px;
-  right: 0;
-  width: 210px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  display: grid;
-  gap: 4px;
-  background: var(--white);
-  box-shadow: 0 13px 28px rgba(68, 45, 27, 0.14);
-}
-.account-panel[hidden] {
-  display: none;
-}
-.current-user-email {
-  padding: 2px 8px 4px;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 10px;
-  text-overflow: ellipsis;
-}
-.panel-action {
-  padding: 10px 8px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--ink);
-  text-align: left;
-  background: transparent;
-  font-size: 14px;
-}
-.panel-action:hover {
-  background: var(--orange-soft);
-  color: var(--orange-dark);
-}
-.panel-add {
-  color: var(--orange);
-  font-weight: 700;
-}
-.panel-logout {
-  /* Klein en rustig, gelijk aan het Account-label en de e-mailregel. */
-  color: var(--muted);
-  font-size: 10px;
-}
 .detail-actions {
   display: flex;
   align-items: center;
@@ -523,11 +288,6 @@
   }
 }
 
-.home-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
 .logout-button {
   border: 0;
   color: var(--muted);
@@ -574,26 +334,4 @@
   .drag-ghost {
     transform: none;
   }
-}
-
-/* ---------- Fase 9: uitloggen met niet-verstuurde wijzigingen (§7.3) ---------- */
-/* Gewapend volgens §8.6: oranje met witte tekst, zichtbaar zonder hover. */
-.panel-logout[aria-pressed="true"],
-.panel-logout[aria-pressed="true"]:hover {
-  color: #fff;
-  background: var(--orange);
-  font-weight: 700;
-}
-.panel-logout[aria-pressed="true"]:hover {
-  background: var(--orange-dark);
-}
-.panel-logout:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-.panel-note {
-  margin: 4px 8px 0;
-  color: var(--orange-dark);
-  font-size: 10px;
-  line-height: 1.4;
 }

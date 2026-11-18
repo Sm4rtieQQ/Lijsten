@@ -29,6 +29,7 @@ vi.mock("../composables/useSync", async () => {
 });
 
 import SyncIndicator from "./SyncIndicator.vue";
+import UiSpinner from "./ui/UiSpinner.vue";
 
 async function mountPill(
   status: SyncStatus,
@@ -45,11 +46,10 @@ async function mountPill(
 describe("SyncIndicator (AGENTS.md §7.4)", () => {
   it("toont bij error het NL-label, de rode dot en geen spinner", async () => {
     const wrapper = await mountPill("error");
-    const row = wrapper.get(".sync-row");
-    expect(wrapper.get(".sync-pill").classes()).not.toContain("is-collapsed");
-    expect(row.text()).toContain("Fout bij synchroniseren");
-    expect(wrapper.find(".sync-spinner").exists()).toBe(false);
-    expect(wrapper.find(".sync-dot").exists()).toBe(true);
+    expect(wrapper.attributes("data-collapsed")).toBe("false");
+    expect(wrapper.text()).toContain("Fout bij synchroniseren");
+    expect(wrapper.findComponent(UiSpinner).exists()).toBe(false);
+    expect(wrapper.find('[data-testid="sync-dot"]').exists()).toBe(true);
     expect(wrapper.attributes("data-status")).toBe("error");
   });
 
@@ -57,19 +57,19 @@ describe("SyncIndicator (AGENTS.md §7.4)", () => {
     vi.useFakeTimers();
     try {
       const wrapper = await mountPill("error");
-      expect(wrapper.get(".sync-row").classes()).not.toContain("is-collapsed");
+      expect(wrapper.attributes("data-collapsed")).toBe("false");
 
       vi.advanceTimersByTime(1499);
       await vi.advanceTimersByTimeAsync(0);
-      expect(wrapper.get(".sync-row").classes()).not.toContain("is-collapsed");
+      expect(wrapper.attributes("data-collapsed")).toBe("false");
 
       vi.advanceTimersByTime(1);
       await vi.advanceTimersByTimeAsync(0);
-      expect(wrapper.get(".sync-row").classes()).toContain("is-collapsed");
-      // Het label verdwijnt via CSS (`.is-collapsed .sync-label`), niet via
-      // een v-if; jsdom kan de stylesheet niet laden, dus de class is de
+      expect(wrapper.attributes("data-collapsed")).toBe("true");
+      // Het label verdwijnt via CSS (`group-data-[collapsed=true]:`), niet via
+      // een v-if; jsdom laadt geen stylesheet, dus het attribuut is de
       // component-norm die we hier vastleggen.
-      expect(wrapper.find(".sync-label").exists()).toBe(true);
+      expect(wrapper.find('[data-testid="sync-label"]').exists()).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -80,11 +80,11 @@ describe("SyncIndicator (AGENTS.md §7.4)", () => {
     try {
       holder.refs!.lastSyncedAt.value = "2026-01-01T10:00:00.000Z";
       const wrapper = await mountPill("synced");
-      expect(wrapper.get(".sync-row").text()).toContain("Gesynchroniseerd");
+      expect(wrapper.text()).toContain("Gesynchroniseerd");
 
       vi.advanceTimersByTime(1500);
       await vi.advanceTimersByTimeAsync(0);
-      expect(wrapper.get(".sync-row").classes()).toContain("is-collapsed");
+      expect(wrapper.attributes("data-collapsed")).toBe("true");
     } finally {
       vi.useRealTimers();
     }
@@ -92,27 +92,27 @@ describe("SyncIndicator (AGENTS.md §7.4)", () => {
 
   it("toont bij syncing alleen een spinner en is de pill uitgeschakeld", async () => {
     const wrapper = await mountPill("syncing");
-    expect(wrapper.find(".sync-spinner").exists()).toBe(true);
-    expect(wrapper.find(".sync-dot").exists()).toBe(false);
-    expect(
-      (wrapper.get(".sync-pill").element as HTMLButtonElement).disabled,
-    ).toBe(true);
-    expect(wrapper.get(".sync-row").classes()).not.toContain("is-collapsed");
+    expect(wrapper.findComponent(UiSpinner).exists()).toBe(true);
+    expect(wrapper.find('[data-testid="sync-dot"]').exists()).toBe(false);
+    expect((wrapper.get("button").element as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(wrapper.attributes("data-collapsed")).toBe("false");
   });
 
   it("legt de actie 'Probeer opnieuw' in de aria-label bij een fout", async () => {
     const wrapper = await mountPill("error");
-    expect(wrapper.get(".sync-pill").attributes("aria-label")).toContain(
+    expect(wrapper.get("button").attributes("aria-label")).toContain(
       "Probeer opnieuw",
     );
-    expect(wrapper.get(".sync-pill").attributes("aria-label")).toContain(
+    expect(wrapper.get("button").attributes("aria-label")).toContain(
       "Fout bij synchroniseren",
     );
   });
 
   it("roept syncNow aan bij een klik op de pill", async () => {
     const wrapper = await mountPill("synced");
-    await wrapper.get(".sync-pill").trigger("click");
+    await wrapper.get("button").trigger("click");
     expect(syncNow).toHaveBeenCalledTimes(1);
   });
 
@@ -122,9 +122,9 @@ describe("SyncIndicator (AGENTS.md §7.4)", () => {
       const wrapper = await mountPill("synced");
       vi.advanceTimersByTime(1500);
       await vi.advanceTimersByTimeAsync(0);
-      expect(wrapper.get(".sync-row").classes()).toContain("is-collapsed");
+      expect(wrapper.attributes("data-collapsed")).toBe("true");
 
-      const pill = wrapper.get(".sync-pill");
+      const pill = wrapper.get("button");
       expect((pill.element as HTMLButtonElement).disabled).toBe(false);
       await pill.trigger("click");
       expect(syncNow).toHaveBeenCalledTimes(1);
@@ -133,10 +133,32 @@ describe("SyncIndicator (AGENTS.md §7.4)", () => {
     }
   });
 
+  it("toont bij pending 'In wachtrij' en klapt dan niet in", async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = await mountPill("pending");
+      expect(wrapper.attributes("data-status")).toBe("pending");
+      expect(wrapper.text()).toContain("In wachtrij");
+      vi.advanceTimersByTime(5000);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(wrapper.attributes("data-collapsed")).toBe("false");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("zet status en tijdstip in de tooltip", async () => {
+    holder.refs!.queueLength.value = 0;
+    const wrapper = await mountPill("synced");
+    const title = wrapper.get("button").attributes("title");
+    expect(title).toContain("Gesynchroniseerd");
+    expect(title).toContain("laatste sync: nog niet gesynchroniseerd");
+  });
+
   it("is tijdens het synchroniseren niet klikbaar", async () => {
     const wrapper = await mountPill("syncing");
-    expect(
-      (wrapper.get(".sync-pill").element as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((wrapper.get("button").element as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 });
