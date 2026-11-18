@@ -181,16 +181,19 @@ const ghostStyle = computed(() =>
 
 <template>
   <section class="animate-fade">
-    <header class="mb-9 flex items-start justify-between">
-      <div class="min-w-0">
+    <header class="mb-9">
+      <!-- De titel deelt zijn rij alleen met de accountknop; de pill staat in
+           de rij van het kopje eronder, zodat de titel nooit smaller wordt (§7.4). -->
+      <div
+        class="flex items-start justify-between gap-4"
+        data-testid="title-row"
+      >
         <!-- Ruimte onder het h1 houdt de descender van de 'j' heel (§8.10). -->
-        <h1 class="overflow-hidden pb-[9px] text-ellipsis whitespace-nowrap">
+        <h1
+          class="min-w-0 overflow-hidden pb-[9px] text-ellipsis whitespace-nowrap"
+        >
           Mijn lijstjes
         </h1>
-        <UiEyebrow>OVERZICHT</UiEyebrow>
-      </div>
-      <div class="flex items-center gap-1">
-        <SyncIndicator />
         <div ref="accountRef" class="relative flex items-center gap-[14px]">
           <UiIconButton
             ref="accountButtonRef"
@@ -247,6 +250,13 @@ const ghostStyle = computed(() =>
             </button>
           </div>
         </div>
+      </div>
+      <div
+        class="flex items-center justify-between gap-4"
+        data-testid="eyebrow-row"
+      >
+        <UiEyebrow>OVERZICHT</UiEyebrow>
+        <SyncIndicator />
       </div>
     </header>
 

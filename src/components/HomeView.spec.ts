@@ -131,3 +131,28 @@ describe("HomeView — slepen met zwevende kopie (AGENTS.md §8.15)", () => {
     ).toBeUndefined();
   });
 });
+
+describe("HomeView — plek van de sync-pill (AGENTS.md §7.4)", () => {
+  let wrapper: VueWrapper | undefined;
+
+  beforeEach(() => {
+    AUTH.user.value = { email: "piet@voorbeeld.nl" } as unknown as User;
+  });
+
+  afterEach(() => {
+    wrapper?.unmount();
+    AUTH.user.value = null;
+  });
+
+  it("zet de pill in de rij van het kopje OVERZICHT, niet naast de titel", () => {
+    wrapper = mount(HomeView);
+    const titleRow = wrapper.get('[data-testid="title-row"]');
+    const eyebrowRow = wrapper.get('[data-testid="eyebrow-row"]');
+
+    expect(titleRow.find('[data-testid="sync-dot"]').exists()).toBe(false);
+    expect(titleRow.get("h1").text()).toBe("Mijn lijstjes");
+    expect(titleRow.find(ACCOUNT_BUTTON).exists()).toBe(true);
+    expect(eyebrowRow.find('[data-testid="sync-dot"]').exists()).toBe(true);
+    expect(eyebrowRow.text()).toContain("OVERZICHT");
+  });
+});
