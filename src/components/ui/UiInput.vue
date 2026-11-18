@@ -38,6 +38,8 @@ const el = ref<HTMLInputElement | null>(null);
 defineExpose({
   /** Zet de focus op het veld (bv. bij het openen van een scherm). */
   focus: () => el.value?.focus(),
+  /** Selecteert de tekst in het veld (bv. bij het starten van bewerken). */
+  select: () => el.value?.select(),
 });
 </script>
 

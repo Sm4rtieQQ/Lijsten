@@ -7,6 +7,7 @@ import IconDragHandle from "./icons/IconDragHandle.vue";
 import IconTrash from "./icons/IconTrash.vue";
 import UiCheck from "./ui/UiCheck.vue";
 import UiIconButton from "./ui/UiIconButton.vue";
+import UiInput from "./ui/UiInput.vue";
 
 /**
  * Eén item in de detailweergave. De toestand (bewerken, gewapend, slepen)
@@ -60,10 +61,10 @@ const handleClasses =
 
 /** Tekst en bewerkveld: zelfde maat; afgevinkt grijs en doorgestreept (§8.5). */
 const textClasses =
-  "min-w-0 flex-1 border-0 bg-transparent px-[2px] py-[7px] text-[16px] leading-[1.35] text-ink outline-none group-data-done:text-done group-data-done:line-through";
+  "flex-1 px-[2px] py-[7px] text-[16px] leading-[1.35] group-data-done:text-done group-data-done:line-through";
 
 const rowEl = ref<HTMLElement | null>(null);
-const inputEl = ref<HTMLInputElement | null>(null);
+const inputEl = ref<InstanceType<typeof UiInput> | null>(null);
 
 // Bij bewerken meteen de focus in het veld, met de tekst geselecteerd.
 watch(
@@ -103,10 +104,11 @@ watch(
       :label="item.done ? 'Afvinken ongedaan maken' : 'Item afvinken'"
       @click="emit('toggle')"
     />
-    <input
+    <UiInput
       v-if="editing"
       ref="inputEl"
       v-model="editText"
+      variant="bare"
       :class="[textClasses, 'cursor-text']"
       type="text"
       maxlength="160"
@@ -117,7 +119,7 @@ watch(
     />
     <span
       v-else
-      :class="[textClasses, 'cursor-pointer']"
+      :class="[textClasses, 'min-w-0 cursor-pointer text-ink']"
       @click="emit('toggle')"
       >{{ item.text }}</span
     >

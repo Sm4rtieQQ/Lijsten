@@ -9,6 +9,7 @@ import ItemRow from "./ItemRow.vue";
 import SyncIndicator from "./SyncIndicator.vue";
 import UiButton from "./ui/UiButton.vue";
 import UiIconButton from "./ui/UiIconButton.vue";
+import UiInput from "./ui/UiInput.vue";
 import type { ListItem } from "../types/app";
 
 const {
@@ -26,6 +27,15 @@ const {
 
 const list = computed(() => currentList());
 const newItemText = ref("");
+/** Titel in het veld; volgt de lijst, wordt bij `change` opgeslagen. */
+const titleDraft = ref("");
+watch(
+  () => list.value?.title,
+  (title) => {
+    titleDraft.value = title ?? "";
+  },
+  { immediate: true },
+);
 const editingItemId = ref<string | null>(null);
 const editingText = ref("");
 
@@ -137,15 +147,14 @@ function goBack(): void {
   setActiveList(null);
 }
 
-function onTitleChange(event: Event): void {
-  const el = event.target as HTMLInputElement;
-  const title = el.value.trim();
+function onTitleChange(): void {
+  const title = titleDraft.value.trim();
   const id = activeListId.value;
   if (!id) return;
   if (title) {
     renameList(id, title);
   } else {
-    el.value = list.value?.title ?? "";
+    titleDraft.value = list.value?.title ?? "";
   }
 }
 
@@ -195,9 +204,10 @@ function onClearCompleted(): void {
       <header class="mb-[18px] flex items-start justify-between gap-4">
         <div class="relative min-w-0 flex-1">
           <!-- De oranje lijn groeit mee zolang de titel focus heeft. -->
-          <input
-            class="peer w-full border-0 bg-transparent pb-[9px] font-display text-[39px] font-semibold tracking-[-0.045em] text-ink outline-none max-sm:text-[34px]"
-            :value="list.title"
+          <UiInput
+            v-model="titleDraft"
+            variant="bare"
+            class="peer w-full pb-[9px] font-display text-[39px] font-semibold tracking-[-0.045em] max-sm:text-[34px]"
             type="text"
             maxlength="60"
             aria-label="Naam van het lijstje"
@@ -230,9 +240,10 @@ function onClearCompleted(): void {
         novalidate
         @submit.prevent="onAddItem"
       >
-        <input
-          class="min-w-0 flex-1 border-0 bg-transparent px-3 text-ink outline-none placeholder:text-placeholder"
+        <UiInput
           v-model="newItemText"
+          variant="bare"
+          class="flex-1 px-3 placeholder:text-placeholder"
           type="text"
           maxlength="160"
           placeholder="Wat wil je onthouden?"

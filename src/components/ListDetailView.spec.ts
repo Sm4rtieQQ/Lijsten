@@ -116,3 +116,43 @@ describe("ListDetailView — item bewerken", () => {
     expect(document.activeElement).toBe(wrapper.get(EDIT_INPUT).element);
   });
 });
+
+describe("ListDetailView — titel", () => {
+  let wrapper: VueWrapper | undefined;
+  afterEach(() => {
+    wrapper?.unmount();
+    lists.value = [];
+    setActiveList(null);
+  });
+
+  const TITLE = 'input[aria-label="Naam van het lijstje"]';
+
+  /** Typt in het veld zoals een gebruiker: waarde zetten + `input`. */
+  async function type(text: string): Promise<HTMLInputElement> {
+    const input = wrapper!.get(TITLE);
+    const el = input.element as HTMLInputElement;
+    el.value = text;
+    await input.trigger("input");
+    return el;
+  }
+
+  it("toont de titel en volgt een nieuwe naam van de lijst", async () => {
+    seed([]);
+    wrapper = mount(ListDetailView);
+    const el = wrapper.get(TITLE).element as HTMLInputElement;
+    expect(el.value).toBe("Boodschappen");
+
+    lists.value = lists.value.map((list) => ({ ...list, title: "Markt" }));
+    await flushPromises();
+    expect(el.value).toBe("Markt");
+  });
+
+  it("zet een lege titel bij change terug naar de huidige naam", async () => {
+    seed([]);
+    wrapper = mount(ListDetailView);
+    const el = await type("   ");
+    await wrapper.get(TITLE).trigger("change");
+    expect(el.value).toBe("Boodschappen");
+    expect(lists.value[0]?.title).toBe("Boodschappen");
+  });
+});
