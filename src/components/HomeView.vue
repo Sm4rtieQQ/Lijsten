@@ -7,6 +7,7 @@ import { flushBeforeSignOut } from "../composables/useSync";
 import { registerBackHandler } from "../composables/useBackNavigation";
 import { useDragReorder } from "../composables/useDragReorder";
 import { useLists } from "../composables/useLists";
+import { MAX_TITLE_LENGTH } from "../lib/titleSize";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.vue";
 import ListCard from "./ListCard.vue";
 import SyncIndicator from "./SyncIndicator.vue";
@@ -316,7 +317,7 @@ const ghostStyle = computed(() =>
         v-model="newListTitle"
         variant="underline"
         type="text"
-        maxlength="60"
+        :maxlength="MAX_TITLE_LENGTH"
         placeholder="Bijvoorbeeld: Boodschappen"
         autocomplete="off"
         autofocus

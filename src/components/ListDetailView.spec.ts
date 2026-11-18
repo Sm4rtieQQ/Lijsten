@@ -155,6 +155,35 @@ describe("ListDetailView — titel", () => {
     expect(el.value).toBe("Boodschappen");
     expect(lists.value[0]?.title).toBe("Boodschappen");
   });
+
+  it("begrenst nieuwe titels op 24 tekens en krimpt de letter tijdens het typen (#47)", async () => {
+    seed([]);
+    wrapper = mount(ListDetailView);
+    const input = wrapper.get(TITLE);
+    expect(input.attributes("maxlength")).toBe("24");
+    expect(input.attributes("data-title-size")).toBe("lg");
+
+    await type("a".repeat(17));
+    expect(input.attributes("data-title-size")).toBe("md");
+    await type("Boodschappen weekend AH");
+    expect(input.attributes("data-title-size")).toBe("sm");
+  });
+
+  it("laat een oude titel van 60 tekens heel bij focus en blur (#47)", async () => {
+    const legacy = "x".repeat(60);
+    seed([]);
+    lists.value = lists.value.map((list) => ({ ...list, title: legacy }));
+    wrapper = mount(ListDetailView);
+    await flushPromises();
+    const input = wrapper.get(TITLE);
+    expect((input.element as HTMLInputElement).value).toBe(legacy);
+    expect(input.attributes("data-title-size")).toBe("sm");
+
+    await input.trigger("focus");
+    await input.trigger("blur");
+    expect((input.element as HTMLInputElement).value).toBe(legacy);
+    expect(lists.value[0]?.title).toBe(legacy);
+  });
 });
 
 describe("ListDetailView — plek van de sync-pill (AGENTS.md §7.4)", () => {

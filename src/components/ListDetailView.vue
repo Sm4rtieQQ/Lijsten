@@ -5,6 +5,7 @@ import { useArmedConfirm } from "../composables/useArmedConfirm";
 import { registerBackHandler } from "../composables/useBackNavigation";
 import { useDragReorder } from "../composables/useDragReorder";
 import { useLists } from "../composables/useLists";
+import { MAX_TITLE_LENGTH, titleSize } from "../lib/titleSize";
 import ItemRow from "./ItemRow.vue";
 import SyncIndicator from "./SyncIndicator.vue";
 import UiButton from "./ui/UiButton.vue";
@@ -36,6 +37,8 @@ watch(
   },
   { immediate: true },
 );
+/** Volgt het veld tijdens het typen, zodat de letter meteen meekrimpt (#47). */
+const titleDraftSize = computed(() => titleSize(titleDraft.value));
 const editingItemId = ref<string | null>(null);
 const editingText = ref("");
 
@@ -208,9 +211,10 @@ function onClearCompleted(): void {
           <UiInput
             v-model="titleDraft"
             variant="bare"
-            class="peer w-full pb-[9px] font-display text-[39px] font-semibold tracking-[-0.045em] max-sm:text-[34px]"
+            class="peer w-full pb-[9px] font-display text-[39px] font-semibold tracking-[-0.045em] text-ellipsis data-[title-size=md]:text-[34px] data-[title-size=sm]:text-[29px] max-sm:text-[34px] max-sm:data-[title-size=md]:text-[29px] max-sm:data-[title-size=sm]:text-[24px]"
             type="text"
-            maxlength="60"
+            :maxlength="MAX_TITLE_LENGTH"
+            :data-title-size="titleDraftSize"
             aria-label="Naam van het lijstje"
             @change="onTitleChange"
           />

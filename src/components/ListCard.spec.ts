@@ -35,4 +35,15 @@ describe("ListCard (AGENTS.md §8.15)", () => {
     const wrapper = mount(ListCard, { props: { list, ghost: true } });
     expect(wrapper.attributes("data-drag-id")).toBeUndefined();
   });
+
+  it("geeft lange titels een kleinere stap, zelfde drempels als de detailpagina (#47)", async () => {
+    const wrapper = mount(ListCard, { props: { list } });
+    const title = () => wrapper.get('[data-testid="list-title"]');
+    expect(title().attributes("data-title-size")).toBe("lg");
+    await wrapper.setProps({ list: { ...list, title: "a".repeat(20) } });
+    expect(title().attributes("data-title-size")).toBe("md");
+    await wrapper.setProps({ list: { ...list, title: "x".repeat(60) } });
+    expect(title().attributes("data-title-size")).toBe("sm");
+    expect(title().text()).toBe("x".repeat(60));
+  });
 });
