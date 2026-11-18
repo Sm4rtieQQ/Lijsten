@@ -398,12 +398,11 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 
 - **Prettier verplicht.** Bij elke wijziging aan bewerkte bestanden Prettier toepassen (`npm run format` of editor-integratie). Geen ongevormatteerde diffs.
 - **Geen `console.log`** in productiecode (debug alleen tijdelijk, verwijderen voor commit). Dev-only `console.warn` achter `import.meta.env.DEV` is toegestaan en wordt becommentarieerd.
-- **Touch targets:** minimaal 44x44px waar praktisch mogelijk (behoud UX).
 - **Tailwind CSS v4.** Alle styling staat in utility-klassen in de templates. `src/styles/main.css` is de enige ingang (`main.ts` importeert alleen dat bestand) en legt de laagvolgorde vast: `theme, base, components, utilities`. Een utility wint dus altijd. Importeer nooit CSS zonder laag.
 - **Alleen tokens.** Kleuren, radii, schaduwen, animaties en de safe-area-afstanden staan in `src/styles/tokens.css` (`@theme`). Er is **geen standaardpalet**: `bg-orange-500` en andere losse kleuren leveren geen CSS op. Een nieuwe waarde wordt eerst een token, met een comment waarvoor hij is. Losse maten (`text-[13px]`, `mb-[18px]`) zijn toegestaan; losse kleuren niet.
 - **Base-laag.** De base-laag van `main.css` bevat alleen globale regels: `body`, koppen, knoppen (tap-highlight, `touch-action`), `overscroll-behavior` (§8.14), de globale `:focus-visible`-ring in de accentkleur, en twee bewuste afwijkingen van preflight (`html { line-height: normal }`, `svg` inline). `@apply` alleen daar. Geen eigen klassen of componentlagen.
 - **Primitives.** Knoppen, velden, dialogen, vinkjes, spinners en kopjes zijn `Ui*`-componenten in `src/components/ui`. Pagina's bouwen daarop en geven alleen layout- en tekstklassen mee. De varianten zijn een gewone `Record<Variant, string>`-klassenmap (geen `cva`, geen `tailwind-merge`).
-- **Toestand via attributen.** Toestand staat in ARIA- of data-attributen en de stijl hangt daaraan (`aria-pressed:`, `aria-expanded:`, `data-[state=…]:`, `data-done`, `data-dragging`, `data-drop`), nooit in een toestandsklasse. Specs controleren die attributen, **nooit klassen**.
+- **Toestand via attributen.** Toestand staat in ARIA- of data-attributen en de stijl hangt daaraan (`aria-pressed:`, `aria-expanded:`, `data-[state=…]:`, `data-done`, `data-dragging`, `data-drop`), nooit in een toestandsklasse. Specs van schermen en features controleren die attributen, **nooit klassen**. Alleen de specs van een `Ui*`-primitive mogen diens eigen klassenmap controleren (dat is zijn uiterlijk-contract).
 - **Zichtbaarheid:** `v-show`/`v-if` en `hidden`, geen `display`-klassen die per toestand wisselen. Een scherm dat verschijnt krijgt `animate-fade`.
 - **Inline `style`** alleen voor waarden die pas tijdens het draaien bekend zijn (positie van de sleepkopie, de pull-indicator).
 - **Touch targets:** 44×44px (`--spacing-touch`). Een kleinere knop krijgt een onzichtbaar groter klikvlak (doorzichtige padding of een pseudo-element), niet een grotere zichtbare knop (`UiIconButton`).
@@ -513,7 +512,7 @@ Deze fouten zijn in de legacy-code gevonden en inmiddels opgelost. De les is bli
 | Registratie zonder e-mailverificatie                         | Bevestiging verplicht, afgedwongen in de database (§7.6).                                                                       |
 | Ruwe technische fout (`TypeError`) in de UI                  | Fout afhandelen én mappen naar leesbare NL-tekst (§7.5).                                                                        |
 | Oude CSS zonder laag naast Tailwind                          | CSS zonder laag wint van elke utility. Importeer CSS altijd in een laag (§9).                                                   |
-| Code en specs die op stijlklassen selecteren                 | Selecteer op rol, label, `data-testid` of een ARIA-/data-attribuut; klassen veranderen bij elke restyling (§9).                 |
+| Code en schermspecs die op stijlklassen selecteren           | Selecteer op rol, label, `data-testid` of een ARIA-/data-attribuut; klassen veranderen bij elke restyling (§9).                 |
 
 ## 12. Definition of Done (per taak)
 
