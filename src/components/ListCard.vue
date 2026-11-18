@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 
 import type { DropSide } from "../composables/useDragReorder";
+import { titleSize } from "../lib/titleSize";
 import type { List } from "../types/app";
 import IconDragHandle from "./icons/IconDragHandle.vue";
 import IconTrash from "./icons/IconTrash.vue";
@@ -29,6 +30,9 @@ const emit = defineEmits<{
 }>();
 
 const cardEl = ref<HTMLElement | null>(null);
+
+/** Lange titels krijgen een kleinere letter, op één regel (#47). */
+const size = computed(() => titleSize(props.list.title));
 
 const completedText = computed(() => {
   const items = props.list.items;
@@ -93,7 +97,9 @@ const handleClass =
         <IconDragHandle />
       </button>
       <span
-        class="max-w-full truncate font-display text-[23px] font-semibold tracking-[-0.035em]"
+        class="max-w-full truncate font-display text-[23px] font-semibold tracking-[-0.035em] data-[title-size=md]:text-[20px] data-[title-size=sm]:text-[16px]"
+        :data-title-size="size"
+        data-testid="list-title"
         >{{ list.title }}</span
       >
     </div>

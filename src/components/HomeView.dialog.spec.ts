@@ -73,6 +73,13 @@ describe("HomeView — dialogen (AGENTS.md §8.3, §8.13)", () => {
     expect(handleBack()).toBe(false);
   });
 
+  it("nieuw lijstje: de titel is maximaal 24 tekens (#47)", async () => {
+    const w = await openNewList();
+    expect(
+      w.get('input[aria-label="Naam van het lijstje"]').attributes("maxlength"),
+    ).toBe("24");
+  });
+
   it("nieuw lijstje: versturen maakt de lijst en sluit de dialoog", async () => {
     const w = await openNewList();
     await w

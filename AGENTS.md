@@ -394,6 +394,15 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - `touch-action: none` staat **alleen op het handvat**: elders blijven scrollen en de swipe omlaag (§8.14) gewoon werken.
 - Na een echte sleep wordt de eerstvolgende klik ingeslikt (`SUPPRESS_CLICK_MS`), anders opent loslaten boven dezelfde kaart de lijst.
 
+### 8.16 Lijsttitels: lengte en lettergrootte
+
+- **Maximaal 24 tekens** voor een nieuwe of hernoemde titel: `maxlength` = `MAX_TITLE_LENGTH` uit `src/lib/titleSize.ts`, op het veld in de dialoog 'Nieuw lijstje' (`HomeView.vue`) en op de titel van de detailweergave (`ListDetailView.vue`). De database-check blijft **60** (`supabase/schema.sql`): geen migratie, oudere app-versies blijven werken. Het veld in `ConfirmDeleteDialog.vue` houdt `maxlength="60"`, anders is een oude lange titel niet meer over te typen.
+- **Altijd één regel; de letter krimpt mee met de lengte.** Eén pure helper, `titleSize(title)`, bepaalt de stap voor de kaart (`ListCard.vue`) én de detailpagina, met dezelfde drempels: t/m 16 tekens `lg`, 17–20 `md`, vanaf 21 `sm`. Geen DOM-meting (§5). De stap staat in `data-title-size`; de stijl hangt daaraan (§9) en specs controleren dat attribuut.
+  - Kaart: 23 / 20 / 16px.
+  - Detailpagina: 39 / 34 / 29px op desktop, 34 / 29 / 24px op ≤ 520px. Op de detailpagina volgt de stap het veld tijdens het typen.
+- Realistische titels van 24 tekens passen op 360px. Titels van alleen brede letters (bv. 24× 'W') passen niet; die vallen terug op de ellips.
+- **Oude titels langer dan 24 tekens** blijven werken: kleinste stap plus een ellips (kaart `truncate`, titelveld `text-ellipsis`). `maxlength` beperkt alleen het typen: focus en blur kappen een bestaande lange titel niet af.
+
 ## 9. Stijl, conventies & kwaliteit
 
 - **Prettier verplicht.** Bij elke wijziging aan bewerkte bestanden Prettier toepassen (`npm run format` of editor-integratie). Geen ongevormatteerde diffs.
