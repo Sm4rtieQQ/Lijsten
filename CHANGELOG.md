@@ -3,7 +3,36 @@
 Alle noemenswaardige wijzigingen aan Lijstjes, nieuwste bovenaan.
 Notatie: versienummer = `package.json` / Android `versionName` (`versionCode`).
 
-## [Unreleased]
+## [1.5.0] — 2026-11-18
+
+**Oud:** 1.4.0 — `versionName "1.4"` (`versionCode 4`)
+**Nieuw:** 1.5.0 — `versionName "1.5"` (`versionCode 5`)
+
+### Synchroniseren
+
+- Synchroniseren loopt niet meer vast op `duplicate key`: een item dat al op de server stond,
+  wordt herkend in plaats van steeds opnieuw geweigerd.
+- Wijzigingen die je tijdens het synchroniseren maakt, gaan niet meer verloren.
+- Met de app in meerdere tabbladen open wordt een wijziging maar één keer verstuurd.
+- Bij een trage verbinding blijft synchroniseren niet meer hangen.
+- Een wijziging die de server blijvend weigert, blokkeert de rest niet meer. Hij wordt apart
+  bewaard en nooit weggegooid.
+
+### Weergave
+
+- De app ziet er hetzelfde uit, maar de opmaak is volledig vernieuwd (Tailwind).
+- Lettertypes zitten in de app zelf, dus ook zonder internet klopt de letter.
+- Een lange lijsttitel duwt de verwijderknop op een smal scherm niet meer buiten beeld.
+- Een lang wachtwoord loopt niet meer onder het oogje door.
+- De dialoog `Nieuw lijstje` sluit nu ook bij een klik buiten de dialoog.
+- Ruimere tikvlakken voor de sync-pill en het afvinkvakje.
+- Op een touchscreen blijft een item na een tik niet meer gemarkeerd.
+
+### Android
+
+- Het app-icoon is nu volledig beige, zonder witte rand.
+
+## [1.4.0] — 2026-11-06
 
 ### PWA (Safari/iOS)
 
