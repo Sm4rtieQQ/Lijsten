@@ -90,7 +90,7 @@ Lijsten/
 │   │   ├── AuthCard.vue          # Gedeelde kaart van de auth-schermen
 │   │   ├── PasswordInput.vue     # Wachtwoordveld met oog-toggle
 │   │   ├── icons/                # Gedeelde SVG-iconen (sleephandvat, prullenbak)
-│   │   ├── ui/                   # Tailwind-primitives: UiButton, UiIconButton, UiSpinner, UiField, UiInput
+│   │   ├── ui/                   # Tailwind-primitives: UiButton, UiIconButton, UiSpinner, UiField, UiInput, UiDialog
 │   │   ├── SplashView.vue        # Laadscherm (staat bij het opstarten)
 │   │   ├── LoginView.vue         # Inloggen + knop Registreren
 │   │   ├── RegisterView.vue      # Open registratie (zonder token)
@@ -376,7 +376,7 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Reageer in `App.vue` op het `user.id`, nooit op het `user`-object.** supabase-js vuurt bij elke terugkeer `SIGNED_IN`/`TOKEN_REFRESHED` met een nieuw object voor dezelfde gebruiker. Opnieuw hydrateren daarop toont het laadscherm en zette de app vroeger terug op het overzicht. Alleen een **andere** gebruiker (of uitloggen) reset en hydrateert.
 - **Android-terugknop sluit de app nooit.** `App.vue` koppelt native `App.addListener("backButton", …)` via `useBackNavigation` (opruimen in `onBeforeUnmount`). Volgorde: (1) open dialoog sluiten (nieuw lijstje, verwijderbevestiging), (2) accountmenu sluiten of item-bewerken annuleren, (3) detailweergave → overzicht, (4) registratie-/verificatie-/herstelscherm → inloggen, (5) overzicht of inlogscherm → `App.minimizeApp()` (naar het Android-startscherm; de app blijft draaien).
 - Schermen en dialogen registreren een handler met `registerBackHandler(fn)` in hun eigen `onMounted` en melden zich af in `onBeforeUnmount` (§5). Een handler geeft `true` terug als hij de terugknop heeft afgehandeld; de nieuwste handler gaat voor. De auth-schermen lopen via de fallback in `App.vue` (zelfde volgorde als de view-keuze).
-- In de browser bestaat de terugknop niet; daar sluit **ESC** dialogen en het menu.
+- In de browser bestaat de terugknop niet; daar sluit **ESC** dialogen en het menu. Een klik buiten een dialoog (op de backdrop) sluit hem ook, zonder actie (`UiDialog`, beide dialogen).
 
 ### 8.14 Swipe omlaag synchroniseert (pull-to-refresh)
 
