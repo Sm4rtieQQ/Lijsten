@@ -2,14 +2,14 @@
 import { computed, ref } from "vue";
 
 /**
- * Tekstveld. De varianten zijn exact het huidige uiterlijk (visuele
- * gelijkheid tijdens de Tailwind-migratie, GitHub-issue #17):
- * - `boxed`: papierkleurig vlak met rand, de oude `.login-form input`;
- *   bij focus een oranje rand met een zachte ring;
- * - `underline`: alleen een onderlijn, de oude `.new-list-dialog input`
- *   en `.confirm-form input`; bij focus wordt de lijn oranje;
+ * Tekstveld (GitHub-issue #17):
+ * - `boxed`: papierkleurig vlak met rand, de auth-formulieren; bij focus
+ *   een oranje rand met een zachte ring;
+ * - `underline`: alleen een onderlijn, de velden in een dialoog; bij focus
+ *   wordt de lijn oranje;
  * - `bare`: geen rand en geen vlak, voor een veld waarvan de omgeving de
- *   focus toont (de lijsttitel, het nieuw-itemformulier).
+ *   focus toont (de lijsttitel, het nieuw-itemformulier); de gebruiker
+ *   kiest zelf een placeholderkleur.
  *
  * Alle andere attributen (`type`, `placeholder`, `autocomplete`, `aria-*`,
  * …) komen op de `<input>`. Een gebruiker geeft alleen layout- en
@@ -25,9 +25,9 @@ const model = defineModel<string>();
 
 const variants: Record<Variant, string> = {
   boxed:
-    "w-full rounded-control border border-line bg-paper p-3 outline-none focus:border-accent focus:shadow-focus",
+    "w-full rounded-control border border-line bg-paper p-3 text-field outline-none placeholder:text-field-placeholder focus:border-accent focus:shadow-focus",
   underline:
-    "w-full border-0 border-b border-line bg-transparent py-[13px] text-[16px] text-ink outline-none focus:border-accent",
+    "w-full border-0 border-b border-line bg-transparent py-[13px] text-[16px] text-ink outline-none placeholder:text-field-placeholder focus:border-accent",
   bare: "min-w-0 border-0 bg-transparent text-ink outline-none",
 };
 

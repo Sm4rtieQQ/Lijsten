@@ -12,17 +12,17 @@
 
 ## 2. Techstack
 
-| Onderdeel       | Technologie                                                                               |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| Frontend        | Vue 3.5+, TypeScript (strict), Composition API (`<script setup lang="ts">`)               |
-| Build tool      | [Vite](https://vitejs.dev/)                                                               |
-| Backend/Auth/DB | [Supabase](https://supabase.com/) (Auth + Postgres + Row Level Security)                  |
-| Auth            | **Open registratie met e-mailverificatie** — bevestiging verplicht vóór toegang (§7.6)    |
-| Mobile          | [Capacitor](https://capacitorjs.com/) Android                                             |
-| Stijl           | Tailwind CSS v4, migratie loopt (§9): tokens in `src/styles/tokens.css`                   |
-| Code kwaliteit  | [Prettier](https://prettier.io/) (moet altijd toegepast worden voor gewijzigde bestanden) |
-| Typechecking    | `vue-tsc -b` (strict, project references) — een typefout blokkeert de build               |
-| Tests           | [Vitest](https://vitest.dev/) + `@vue/test-utils` + `jsdom` (`npm run test`)              |
+| Onderdeel       | Technologie                                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Frontend        | Vue 3.5+, TypeScript (strict), Composition API (`<script setup lang="ts">`)                                      |
+| Build tool      | [Vite](https://vitejs.dev/)                                                                                      |
+| Backend/Auth/DB | [Supabase](https://supabase.com/) (Auth + Postgres + Row Level Security)                                         |
+| Auth            | **Open registratie met e-mailverificatie** — bevestiging verplicht vóór toegang (§7.6)                           |
+| Mobile          | [Capacitor](https://capacitorjs.com/) Android                                                                    |
+| Stijl           | Tailwind CSS v4 (`@tailwindcss/vite`): tokens in `src/styles/tokens.css`, primitives in `src/components/ui` (§9) |
+| Code kwaliteit  | [Prettier](https://prettier.io/) (moet altijd toegepast worden voor gewijzigde bestanden)                        |
+| Typechecking    | `vue-tsc -b` (strict, project references) — een typefout blokkeert de build                                      |
+| Tests           | [Vitest](https://vitest.dev/) + `@vue/test-utils` + `jsdom` (`npm run test`)                                     |
 
 ## 3. Commando's
 
@@ -82,9 +82,9 @@ Lijsten/
 ├── src/
 │   ├── App.vue             # View-switching: splash / login / registratie / verificatie / overzicht / detail
 │   ├── main.ts
-│   ├── styles/main.css     # Geïmporteerd in main.ts — Tailwind, tokens, base-laag
-│   ├── styles/tokens.css   # Designtokens (@theme) + aliassen voor de oude namen
-│   ├── styles.css          # Oude CSS, in laag legacy (verdwijnt tijdens de migratie)
+│   ├── styles/main.css     # Enige CSS-ingang (main.ts): laagvolgorde, Tailwind, base-laag
+│   ├── styles/tokens.css   # Designtokens (@theme): kleuren, radii, schaduwen, animaties, safe-area
+│   ├── styles/fonts.css    # @font-face van de zelf gehoste fonts (src/assets/fonts/)
 │   ├── env.d.ts            # TypeScript env types
 │   ├── components/
 │   │   ├── AuthCard.vue          # Gedeelde kaart van de auth-schermen
@@ -284,9 +284,9 @@ Bij klikken op "verwijder lijst" (per kaart) opent een **bevestigingsmodal/dialo
 
 ### 8.5 Item afvinken
 
-- Wanneer een item als `done = true` wordt opgeslagen, wordt het visueel weergegeven als afgerond (bestaande stijl behouden: `text-decoration: line-through`, grijs etc.).
+- Wanneer een item als `done = true` wordt opgeslagen, wordt het visueel weergegeven als afgerond (doorgestreept en grijs, via `data-done` op de rij).
 - De app zelf slaat **geen** `[x]` prefix op in de `text` — de UI rendert alleen de visuele status.
-- De checkboxes op de detailpagina zijn **vierkant met afgeronde hoeken**, in dezelfde radius-stijl als de andere knoppen in de app (dus **niet** `border-radius: 50%`). Dat is `UiCheck` met `rounded-check`; de toestand staat in `data-checked`, de rij in `data-done`.
+- De checkboxes op de detailpagina zijn **vierkant met afgeronde hoeken**, in dezelfde radius-stijl als de andere knoppen in de app (dus **niet** `rounded-full`). Dat is `UiCheck` met `rounded-check`; de toestand staat in `data-checked`, de rij in `data-done`.
 
 ### 8.6 Items verwijderen via dubbele input
 
@@ -310,9 +310,9 @@ Regels:
 - Bij het **opstarten van de applicatie** is altijd eerst het laadscherm zichtbaar, ook als de sessie meteen bekend is.
 - **Authentieatie vindt op de achtergrond plaats.** Het laadscherm wacht tot de sessie bekend is; is er een sessie, dan wordt daarna het overzicht getoond, anders de inlogpagina.
 - Het laadscherm toont de **apptitel `Lijstjes`** in dezelfde stijl als op de overzichtspagina, met een **oranje horizontale streep eronder**, identiek aan de titelstreep op de detailpagina.
-- **Rechtsonderin de pagina** staat een **spinner** zolang het laden duurt (bestaande `@keyframes spin` en het oranje palet hergebruiken).
-- Het laadscherm **kan niet scrollen**: `position: fixed; inset: 0; height: 100dvh; overflow: hidden`, met de app-achtergrondkleur.
-- Toegankelijkheid: `role="status"`, `aria-busy="true"`, en een visueel verborgen tekst (`Laden…`) zodat de status voorgelezen wordt.
+- **Rechtsonderin de pagina** staat een **spinner** zolang het laden duurt (`UiSpinner`, animatie `animate-spin-fast`).
+- Het laadscherm **kan niet scrollen**: `fixed inset-0 h-dvh overflow-hidden bg-paper`.
+- Toegankelijkheid: `role="status"`, `aria-busy="true"`, en een visueel verborgen tekst (`Laden…`, `sr-only`) zodat de status voorgelezen wordt.
 - Het overzicht mag niet eerst leeg flitsen: toon het laadscherm ook tijdens de eerste `hydrate()` van een ingelogde gebruiker, met een **maximumwachttijd van 3 seconden** als vangnet.
 
 ### 8.8 Accountmenu
@@ -325,7 +325,7 @@ Het accountmenu (`HomeView.vue`) heeft deze **volgorde**, exact:
 4. `Uitloggen`
 
 - De **accountknop wordt oranje** zodra het menu open is, en wordt **hersteld** naar de normale stijl zodra het menu weer sluit (de stijl hangt aan `aria-expanded="true"`, `UiIconButton`).
-- **In de Android-app wordt de knop niet blauw bij tikken.** Onderdruk de standaard tap-highlight van het platform: `-webkit-tap-highlight-color: transparent` (en `touch-action: manipulation`) voor knoppen. De focusring blijft zichtbaar via `:focus-visible` — dus nooit `outline: none` zonder alternatief.
+- **In de Android-app wordt de knop niet blauw bij tikken.** Onderdruk de standaard tap-highlight van het platform: `-webkit-tap-highlight-color: transparent` (en `touch-action: manipulation`) voor knoppen. Dat staat voor alle knoppen in de base-laag van `src/styles/main.css`. De focusring blijft zichtbaar via de globale `:focus-visible` daar — dus nooit `outline-none` zonder alternatief.
 - Toegankelijkheid: `aria-expanded` en `aria-controls` op de knop, ESC sluit het menu, focus gaat terug naar de knop, klikken buiten sluit (bestaande `onDocumentClick`).
 
 ### 8.9 Inlogpagina
@@ -336,7 +336,7 @@ Het accountmenu (`HomeView.vue`) heeft deze **volgorde**, exact:
 
 ### 8.10 Overzichtspagina — titel
 
-- De titel `Mijn Lijstjes` mag niet worden afgeknapt: de **onderkant van de 'j' moet zichtbaar blijven**. `h1 { line-height: 1 }` snijt de descender weg, dus de titel heeft een ruimere `line-height` en/of `padding-bottom`.
+- De titel `Mijn Lijstjes` mag niet worden afgeknapt: de **onderkant van de 'j' moet zichtbaar blijven**. Een regelhoogte van 1 snijt de descender weg, dus `h1` heeft in de base-laag van `main.css` `line-height: 1.12` en de titel in `HomeView.vue` een `pb-[9px]`.
 - Geldt ook op mobiele schermen (de breakpoint verkleint de `font-size`, maar de regel blijft).
 
 ### 8.11 Deep link en wachtwoord herstellen
@@ -362,7 +362,7 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 - **Bestanden:** `public/manifest.webmanifest`, `public/sw.js`, `public/icons/*` (192/512 + maskable + `apple-touch-icon` 180) en `public/favicon.svg`. De registratie staat in `src/pwa/register-sw.ts` (niet in dev, niet in de Capacitor-app, faalt stil).
 - **`index.html`** bevat de iOS-meta's: `apple-touch-icon`, `apple-mobile-web-app-capable/status-bar-style/title`, `mobile-web-app-capable`, `theme-color` en `viewport-fit=cover`.
 - **Safari iOS:** installeren via **Delen → Zet op beginscherm**. `display: standalone` uit het manifest (plus de meta-tag) laat de app zonder browserchrome openen.
-- **Veilige zones:** `.app-shell` in `styles.css` verrekent `env(safe-area-inset-*)` (notch + home-indicator). Er zijn **twee** `.app-shell`-regels (basis + `max-width: 520px`); wijzig ze samen (§9).
+- **Veilige zones:** de app-shell in `App.vue` verrekent de safe-area-tokens (`--spacing-safe-*` in `tokens.css`, `env(safe-area-inset-*)`) in zijn padding (notch + home-indicator), voor desktop en via `max-sm:` voor mobiel. Wijzig beide reeksen samen; elementen met `fixed` bovenin gebruiken dezelfde tokens (bv. `top-safe-top`).
 - **Deep links verschillen:** een browser kent `com.lijstjes.app://` niet. Op het web is `emailRedirectTo` daarom de volledige pagina-URL (`window.location.origin` **plus** `window.location.pathname`, zie §8.11), zodat een projectpagina onder `/Lijsten/` klopt. Voor de PWA moet dat **https-adres** in Supabase bij **Redirect URLs** staan (en in Site URL). Dat is dashboard-configuratie, geen code.
 - **Offline:** Supabase-verkeer (andere origin) wordt **nooit** gecacht; de app-shell en de zelf gehoste fonts wel (de fonts na het eerste online bezoek, via de runtime-cache). De data is toch al offline-first (§7).
 - **Service worker-versie:** verhoog `CACHE_VERSION` in `public/sw.js` wanneer de app-shell wijzigt, zodat oude caches worden opgeruimd.
@@ -398,10 +398,18 @@ Naast de Android-app kan dezelfde `dist/` als **PWA** worden aangeboden. Daar is
 
 - **Prettier verplicht.** Bij elke wijziging aan bewerkte bestanden Prettier toepassen (`npm run format` of editor-integratie). Geen ongevormatteerde diffs.
 - **Geen `console.log`** in productiecode (debug alleen tijdelijk, verwijderen voor commit). Dev-only `console.warn` achter `import.meta.env.DEV` is toegestaan en wordt becommentarieerd.
-- **Touch targets:** minimaal 44x44px waar praktisch mogelijk (behoud UX).
-- **Tailwind-migratie (loopt, GitHub-issues #13–#24):** de styling gaat stap voor stap over naar Tailwind CSS v4. Tokens staan in `src/styles/tokens.css` (`@theme`, geen standaardpalet: alleen de eigen kleuren bestaan). `src/styles/main.css` is de ingang en importeert de oude `src/styles.css` in de laag `legacy`, zodat utilities altijd winnen. Elke migratiestap houdt het uiterlijk gelijk (vergelijk met screenshots van vóór de wijziging, desktop en 360px) en verwijdert de vervangen oude regels. Importeer nooit CSS zonder laag. De volledige stijlregels volgen in #24; tot dan geldt de rest van deze sectie voor de oude CSS.
-- **CSS:** hergebruik bestaande stijl waar mogelijk. De oude CSS staat in `src/styles.css` en komt binnen via `src/styles/main.css` (laag `legacy`); `main.ts` importeert alleen `main.css`. Houd dezelfde look & feel. DM Sans en Playfair Display staan zelf gehost in `src/assets/fonts/` (woff2 + OFL) met `@font-face` in `src/styles/fonts.css`; gebruik daar altijd relatieve `url()` (de app draait onder `./` en onder `/Lijsten/`). Geen Google Fonts-link.
-- **Bronvolgorde in `styles.css`:** latere regels met dezelfde selector winnen. De dubbele definities zijn met de Tailwind-migratie verdwenen; voeg er geen nieuwe toe.
+- **Tailwind CSS v4.** Alle styling staat in utility-klassen in de templates. `src/styles/main.css` is de enige ingang (`main.ts` importeert alleen dat bestand) en legt de laagvolgorde vast: `theme, base, components, utilities`. Een utility wint dus altijd. Importeer nooit CSS zonder laag.
+- **Alleen tokens.** Kleuren, radii, schaduwen, animaties en de safe-area-afstanden staan in `src/styles/tokens.css` (`@theme`). Er is **geen standaardpalet**: `bg-orange-500` en andere losse kleuren leveren geen CSS op. Een nieuwe waarde wordt eerst een token, met een comment waarvoor hij is. Losse maten (`text-[13px]`, `mb-[18px]`) zijn toegestaan; losse kleuren niet.
+- **Base-laag.** De base-laag van `main.css` bevat alleen globale regels: `body`, koppen, knoppen (tap-highlight, `touch-action`), `overscroll-behavior` (§8.14), de globale `:focus-visible`-ring in de accentkleur, en twee bewuste afwijkingen van preflight (`html { line-height: normal }`, `svg` inline). `@apply` alleen daar. Geen eigen klassen of componentlagen.
+- **Primitives.** Knoppen, velden, dialogen, vinkjes, spinners en kopjes zijn `Ui*`-componenten in `src/components/ui`. Pagina's bouwen daarop en geven alleen layout- en tekstklassen mee. De varianten zijn een gewone `Record<Variant, string>`-klassenmap (geen `cva`, geen `tailwind-merge`).
+- **Toestand via attributen.** Toestand staat in ARIA- of data-attributen en de stijl hangt daaraan (`aria-pressed:`, `aria-expanded:`, `data-[state=…]:`, `data-done`, `data-dragging`, `data-drop`), nooit in een toestandsklasse. Specs van schermen en features controleren die attributen, **nooit klassen**. Alleen de specs van een `Ui*`-primitive mogen diens eigen klassenmap controleren (dat is zijn uiterlijk-contract).
+- **Zichtbaarheid:** `v-show`/`v-if` en `hidden`, geen `display`-klassen die per toestand wisselen. Een scherm dat verschijnt krijgt `animate-fade`.
+- **Inline `style`** alleen voor waarden die pas tijdens het draaien bekend zijn (positie van de sleepkopie, de pull-indicator).
+- **Touch targets:** 44×44px (`--spacing-touch`). Een kleinere knop krijgt een onzichtbaar groter klikvlak (doorzichtige padding of een pseudo-element), niet een grotere zichtbare knop (`UiIconButton`).
+- **Omslagpunt:** het enige omslagpunt is 520px. Desktop-first: `max-sm:` is ≤ 520px (`--breakpoint-sm: 521px`).
+- **Fonts:** DM Sans en Playfair Display staan zelf gehost in `src/assets/fonts/` (woff2 + OFL) met `@font-face` in `src/styles/fonts.css`; gebruik daar altijd relatieve `url()` (de app draait onder `./` en onder `/Lijsten/`). Geen Google Fonts-link.
+- **Prettier sorteert de klassen** (`prettier-plugin-tailwindcss`); `npm run format` regelt de volgorde.
+- **Visuele wijzigingen:** vergelijk met screenshots van vóór de wijziging, desktop en 360px.
 - **Comments:** alleen waar nodig om complexe logica uit te leggen (niet overbodig).
 - **Git:** commit per afgeronde taak waar zinvol. `.gitignore` bevat `node_modules/`, `dist/`, `.env`, `.DS_Store`, Android build-artifacts, `*.keystore`, `*.jks` en `*.apk`.
 
@@ -503,6 +511,8 @@ Deze fouten zijn in de legacy-code gevonden en inmiddels opgelost. De les is bli
 | `window.confirm` als bevestiging                             | Eigen component met toegankelijkheid, of (bij items) de twee-staps knop van §8.6.                                               |
 | Registratie zonder e-mailverificatie                         | Bevestiging verplicht, afgedwongen in de database (§7.6).                                                                       |
 | Ruwe technische fout (`TypeError`) in de UI                  | Fout afhandelen én mappen naar leesbare NL-tekst (§7.5).                                                                        |
+| Oude CSS zonder laag naast Tailwind                          | CSS zonder laag wint van elke utility. Importeer CSS altijd in een laag (§9).                                                   |
+| Code en schermspecs die op stijlklassen selecteren           | Selecteer op rol, label, `data-testid` of een ARIA-/data-attribuut; klassen veranderen bij elke restyling (§9).                 |
 
 ## 12. Definition of Done (per taak)
 
@@ -527,7 +537,9 @@ Een taak is pas afgerond als:
 
 - **NIET** handmatig bewerken in `dist/` of `android/app/src/main/assets/public/`.
 - **NIET** secrets committen (`.env`, keystores `*.jks`, `*.keystore`, wachtwoorden).
-- **NIET** CDN scripts toevoegen (Supabase via npm).
+- **NIET** CDN scripts toevoegen (Supabase via npm); ook geen Tailwind Play CDN.
+- **NIET** losse kleuren buiten de tokens gebruiken (`text-[#…]`, `bg-[rgb(…)]`); maak eerst een token (§9).
+- **NIET** een nieuw los CSS-bestand of een eigen klasse toevoegen; gebruik utilities en de `Ui*`-primitives (§9).
 - **NIET** voorbeeldlijsten toevoegen voor ingelogde gebruikers.
 - **NIET** destructieve bulk-sync implementeren.
 - **NIET** verificatie omzeilen: geen sessie of route die toegang geeft zonder bevestigd e-mailadres; "Confirm email" + RLS (`is_email_confirmed()`) zijn de grendel.

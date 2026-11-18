@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -30,10 +30,9 @@ function token(css: string, name: string): string | undefined {
 }
 
 describe("main.css", () => {
-  it("legt de laagvolgorde vast met legacy tussen base en components", () => {
-    expect(mainCss).toContain(
-      "@layer theme, base, legacy, components, utilities;",
-    );
+  it("legt de laagvolgorde vast, zonder laag legacy", () => {
+    expect(mainCss).toContain("@layer theme, base, components, utilities;");
+    expect(mainCss).not.toContain("legacy");
   });
 
   it("importeert Tailwind en de tokens", () => {
@@ -45,17 +44,15 @@ describe("main.css", () => {
     expect(mainCss).toContain('@import "./fonts.css";');
   });
 
-  it("importeert de oude CSS in de laag legacy, nooit zonder laag", () => {
-    expect(mainCss).toContain('@import "../styles.css" layer(legacy);');
-    const unlayered = [...mainCss.matchAll(/@import\s+"([^"]+)"\s*;/g)]
-      .map((match) => match[1])
-      .filter(
-        (path) =>
-          path !== "tailwindcss" &&
-          path !== "./tokens.css" &&
-          path !== "./fonts.css",
-      );
-    expect(unlayered).toEqual([]);
+  it("importeert geen andere CSS dan Tailwind, fonts en tokens", () => {
+    const imports = [...mainCss.matchAll(/@import\s+"([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(imports).toEqual(["tailwindcss", "./fonts.css", "./tokens.css"]);
+  });
+
+  it("de oude src/styles.css bestaat niet meer", () => {
+    expect(existsSync(resolve("src/styles.css"))).toBe(false);
   });
 
   it("heeft een globale :focus-visible-ring in de accentkleur", () => {
@@ -86,17 +83,11 @@ describe("tokens.css", () => {
     expect(token(tokensCss, name)).toBe(value);
   });
 
-  it.each([
-    ["--paper", "var(--color-paper)"],
-    ["--ink", "var(--color-ink)"],
-    ["--muted", "var(--color-muted)"],
-    ["--line", "var(--color-line)"],
-    ["--orange", "var(--color-accent)"],
-    ["--orange-dark", "var(--color-accent-dark)"],
-    ["--orange-soft", "var(--color-accent-soft)"],
-    ["--white", "var(--color-surface)"],
-  ])("oude naam %s verwijst naar %s", (name, value) => {
-    expect(token(tokensCss, name)).toBe(value);
+  it("definieert de keyframes van de animatietokens", () => {
+    expect(tokensCss).toContain("--animate-fade: fade ");
+    expect(tokensCss).toContain("@keyframes fade {");
+    expect(tokensCss).toContain("--animate-spin-fast: spin ");
+    expect(tokensCss).toContain("@keyframes spin {");
   });
 });
 

@@ -2,14 +2,13 @@
 import { computed, useSlots } from "vue";
 
 /**
- * Knop met tekst. De varianten zijn exact het huidige uiterlijk (visuele
- * gelijkheid tijdens de Tailwind-migratie, GitHub-issue #15):
- * - `primary`: oranje, de oude `.dialog-submit` (pijl via `#trailing`);
- * - `secondary`: oranje tekst met rand, de oude `.button-secondary`;
- * - `text`: oranje tekst, de oude `.text-button`/`.clear-button`;
- * - `text-muted`: grijze tekst, de oude `.back-button`;
- * - `outline`: donkere tekst met rand, de oude `.confirm-action`;
- * - `danger`: oranje, de oude `.confirm-action.is-danger` (even hoog als
+ * Knop met tekst (GitHub-issue #15):
+ * - `primary`: oranje vlak, de hoofdactie (pijl via `#trailing`);
+ * - `secondary`: oranje tekst met rand (bv. registreren);
+ * - `text`: oranje tekst zonder rand (bv. "Wachtwoord vergeten?");
+ * - `text-muted`: grijze tekst (bv. terug naar het overzicht);
+ * - `outline`: donkere tekst met rand (bv. annuleren in een dialoog);
+ * - `danger`: oranje, een destructieve bevestiging (even hoog als
  *   `outline`, kleinere tekst dan `primary`).
  *
  * `armed` (alleen als de knop een twee-stapsbevestiging is, §8.6) zet
@@ -60,7 +59,7 @@ const sizes: Record<Size, string> = {
   sm: "text-[13px]",
 };
 
-/** Een tekstknop met een icoon ervoor (de oude `.clear-button`). */
+/** Een tekstknop met een icoon ervoor (bv. afgevinkte items verwijderen). */
 const textWithIcon = "inline-flex items-center gap-1.5 py-1";
 
 /** Gewapend (§8.6): oranje met witte tekst, ook bij hover. */

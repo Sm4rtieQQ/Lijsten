@@ -3,10 +3,9 @@ import { computed } from "vue";
 
 /**
  * Label met het veld erin (het `<label>` omsluit het veld, dus er is geen
- * `for`/`id` nodig). De tonen zijn exact het huidige uiterlijk (GitHub-issue
- * #17):
- * - `ink`: vet en donker, de oude `.login-form label`;
- * - `muted`: halfvet en grijs, de oude `.confirm-label`.
+ * `for`/`id` nodig). Tonen (GitHub-issue #17):
+ * - `ink`: vet en donker, de auth-formulieren;
+ * - `muted`: halfvet en grijs, de bevestigingsdialoog.
  */
 type Tone = "ink" | "muted";
 

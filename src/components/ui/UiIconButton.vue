@@ -3,15 +3,15 @@ import { computed, ref } from "vue";
 
 /**
  * Knop met alleen een icoon; `label` wordt de verplichte `aria-label`.
- * De varianten zijn exact het huidige uiterlijk (GitHub-issue #15):
- * - `outline`: 38px met rand, de oude accountknop `.icon-button`; oranje
- *   zolang `aria-expanded="true"` (menu open, §8.8);
- * - `ghost`: 30px, de oude `.edit-button`/`.item-delete-button`;
- * - `ghost-round`: 44px rond, de oude `.card-delete`;
- * - `close`: 31px rond met een `&times;`, de oude `.dialog-close`
+ * Varianten (GitHub-issue #15):
+ * - `outline`: 38px met rand, de accountknop; oranje zolang
+ *   `aria-expanded="true"` (menu open, §8.8);
+ * - `ghost`: 30px, aanpassen en verwijderen op een item;
+ * - `ghost-round`: 44px rond, verwijderen op een lijstkaart;
+ * - `close`: 31px rond met een `&times;`, sluiten van een dialoog
  *   (de gebruiker positioneert hem, bv. `absolute`);
- * - `solid`: oranje, de oude `.add-item-button` (rekt mee in hoogte);
- * - `field`: 31px, in een tekstveld, de oude oog-knop van `.password-field`
+ * - `solid`: oranje, item toevoegen (rekt mee in hoogte);
+ * - `field`: 31px, in een tekstveld, bv. het oog van een wachtwoordveld
  *   (de gebruiker positioneert hem, bv. `absolute`).
  *
  * Kleiner dan 44px krijgt een onzichtbaar groter klikvlak (§9, touch

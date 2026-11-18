@@ -1,8 +1,8 @@
 /*
  * Designtokens: de enige plek met losse kleur-, radius- en schaduwwaarden.
  * Elk token wordt een Tailwind-utility (`bg-paper`, `text-accent`,
- * `rounded-card`, `shadow-dialog`, ...). De waarden zijn exact het huidige
- * uiterlijk (visuele gelijkheid tijdens de migratie, GitHub-issue #13).
+ * `rounded-card`, `shadow-dialog`, ...). De waarden zijn exact het uiterlijk
+ * van vóór de Tailwind-migratie (GitHub-issues #13–#24).
  */
 @theme {
   /* Geen standaardpalet: alleen deze kleuren bestaan, dus `bg-orange-500`
@@ -50,6 +50,15 @@
   --color-placeholder: #b2a79b;
   --color-done: #aaa198;
   --color-empty: #aaa095;
+  /* Tekstvelden (GitHub-issue #24): de getypte tekst van een omkaderd veld
+     en de placeholder van omkaderde en onderlijnde velden, exact de
+     browserstandaard (Chrome en dus de Android WebView). */
+  --color-field: fieldtext;
+  --color-field-placeholder: #757575;
+  /* De groene bevestiging na e-mailverificatie (App.vue, §8.9). */
+  --color-success: #1c6b3a;
+  --color-success-soft: #e4f5ea;
+  --color-success-line: #b7e0c4;
 
   --font-sans: "DM Sans", sans-serif;
   --font-display: "Playfair Display", serif;
@@ -74,10 +83,28 @@
   --shadow-ghost: 0 14px 30px rgba(52, 46, 42, 0.18);
   --shadow-focus: 0 0 0 3px #e66d351a;
   --shadow-form: 0 5px 13px #5d412109;
+  --shadow-banner: 0 10px 26px rgba(46, 92, 63, 0.16);
+  --shadow-indicator: 0 4px 14px rgba(52, 46, 42, 0.16);
 
-  /* De keyframes staan in main.css (de oude CSS noemt ze bij naam). */
   --animate-fade: fade 0.22s ease both;
   --animate-spin-fast: spin 0.7s linear infinite;
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+      transform: translateY(5px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   /* Het enige omslagpunt van de app is 520px (desktop-first `max-width`).
      Mobile-first `sm:` begint één pixel later, dus het omslagpunt blijft. */
@@ -91,17 +118,4 @@
   --spacing-safe-right: env(safe-area-inset-right, 0px);
   --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
   --spacing-safe-left: env(safe-area-inset-left, 0px);
-}
-
-/* Oude namen uit src/styles.css, als alias, zodat ze nooit uiteenlopen.
-   Ze verdwijnen met het oude bestand (GitHub-issue #24). */
-:root {
-  --paper: var(--color-paper);
-  --ink: var(--color-ink);
-  --muted: var(--color-muted);
-  --line: var(--color-line);
-  --orange: var(--color-accent);
-  --orange-dark: var(--color-accent-dark);
-  --orange-soft: var(--color-accent-soft);
-  --white: var(--color-surface);
 }

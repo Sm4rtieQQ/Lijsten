@@ -199,7 +199,7 @@ function onClearCompleted(): void {
 </script>
 
 <template>
-  <section class="view">
+  <section class="animate-fade">
     <template v-if="activeListId && list">
       <header class="mb-[18px] flex items-start justify-between gap-4">
         <div class="relative min-w-0 flex-1">

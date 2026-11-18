@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// Klein oranje kopje in hoofdletterafstand (de oude `.eyebrow`). Geen eigen
-// marge: de aanroeper geeft die mee (alleen layoutklassen). `sm` is het
-// kleinere label in het accountmenu (de oude `.panel-header`).
+// Klein oranje kopje in hoofdletterafstand. Geen eigen marge: de aanroeper
+// geeft die mee (alleen layoutklassen). `sm` is het kleinere label in het
+// accountmenu.
 withDefaults(defineProps<{ size?: "md" | "sm" }>(), { size: "md" });
 
 const sizes = {
