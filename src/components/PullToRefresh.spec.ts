@@ -6,6 +6,7 @@ const { syncNow } = vi.hoisted(() => ({
 }));
 vi.mock("../composables/useSync", () => ({ useSync: () => ({ syncNow }) }));
 
+import ListCard from "./ListCard.vue";
 import PullToRefresh from "./PullToRefresh.vue";
 
 /**
@@ -108,9 +109,9 @@ describe("PullToRefresh (AGENTS.md §8.14)", () => {
     expect(syncNow).toHaveBeenCalledOnce();
   });
 
-  // De component herkent deze plekken aan hun CSS-klassen (BLOCKED in
-  // PullToRefresh.vue). Een hernoeming zonder deze selector mee te nemen
-  // laat de pull weer starten vanaf een handvat (§8.14).
+  // De component herkent deze plekken aan BLOCKED in PullToRefresh.vue.
+  // Handvatten dragen `data-drag-handle`; `.drag-handle` blijft tot het
+  // item-handvat ook het attribuut heeft (GitHub-issue #22).
   it.each([
     ["een invoerveld", "<input />"],
     ["een tekstvak", "<textarea></textarea>"],
@@ -121,8 +122,8 @@ describe("PullToRefresh (AGENTS.md §8.14)", () => {
       '<button class="drag-handle"><span></span></button>',
     ],
     [
-      "het sleephandvat van een lijst",
-      '<button class="list-drag-handle"><span></span></button>',
+      "een handvat met data-drag-handle",
+      "<button data-drag-handle><span></span></button>",
     ],
   ])("niet vanaf %s", async (_name, html) => {
     wrapper = mount(PullToRefresh);
@@ -136,6 +137,24 @@ describe("PullToRefresh (AGENTS.md §8.14)", () => {
     await flushPromises();
     expect(move.defaultPrevented).toBe(false);
     expect(syncNow).not.toHaveBeenCalled();
+  });
+
+  it("niet vanaf het handvat van een echte lijstkaart", async () => {
+    wrapper = mount(PullToRefresh);
+    const card = mount(ListCard, {
+      props: {
+        list: { id: "l1", title: "Boodschappen", createdAt: "", items: [] },
+      },
+      attachTo: document.body,
+    });
+    const icon = card.get("[data-drag-handle] svg").element;
+    touch("touchstart", 10, icon);
+    const move = touch("touchmove", 300, icon);
+    touch("touchend", null, icon);
+    await flushPromises();
+    expect(move.defaultPrevented).toBe(false);
+    expect(syncNow).not.toHaveBeenCalled();
+    card.unmount();
   });
 
   it("ruimt de listeners op bij unmount", async () => {

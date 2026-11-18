@@ -66,97 +66,6 @@
   stroke-width: 2.3;
   stroke-linecap: round;
 }
-.list-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-.list-card {
-  position: relative;
-  min-height: 158px;
-  padding: 21px;
-  border: 1px solid #ddccbfbf;
-  border-radius: 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: inherit;
-  text-align: left;
-  background: #fffdfa8c;
-  transition: 0.18s;
-  /* Cursor volgt de rol: alleen de greep (grab) en de verwijderknop (pointer)
-     zijn directe handelingen; de kaart zelf is een container. */
-  cursor: default;
-}
-.list-card:hover {
-  transform: translateY(-3px);
-  border-color: #e2b49c;
-  box-shadow: 0 11px 25px #51382312;
-}
-.list-card:nth-child(3n + 2) .card-dot {
-  background: #e9b04e;
-}
-.list-card:nth-child(3n) .card-dot {
-  background: #91a772;
-}
-.card-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--orange);
-}
-.card-title-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding-right: 38px;
-}
-.list-drag-handle {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  padding: 0;
-  border: 0;
-  color: #b9aea2;
-  background: transparent;
-  cursor: grab;
-}
-.list-card.dragging .list-drag-handle {
-  cursor: grabbing;
-}
-.list-drag-handle svg {
-  width: 16px;
-  height: 20px;
-  fill: currentColor;
-}
-.list-card.dragging {
-  opacity: 0.35;
-}
-.list-card.drag-over {
-  border-top: 2px solid var(--orange);
-}
-.card-title {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: "Playfair Display", serif;
-  font-size: 23px;
-  font-weight: 600;
-  letter-spacing: -0.035em;
-}
-.card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 13px;
-}
-.card-arrow {
-  color: var(--orange);
-  font-size: 21px;
-}
 .panel-header {
   /* Ruimte + subtiele lijn tussen '+ Nieuw lijstje' en het Account-blok (E-aanpassing). */
   margin: 10px 8px 0;
@@ -311,32 +220,6 @@
   display: flex;
   align-items: center;
   gap: 4px;
-}
-.empty-state {
-  padding: 72px 25px;
-  border: 1px dashed #d7c5b0;
-  border-radius: 20px;
-  text-align: center;
-}
-.empty-icon {
-  width: 46px;
-  height: 46px;
-  margin: 0 auto 17px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--orange);
-  background: var(--orange-soft);
-  font-size: 29px;
-}
-.empty-state h2 {
-  font-size: 26px;
-}
-.empty-state p {
-  max-width: 300px;
-  margin: 10px auto 18px;
-  color: var(--muted);
-  line-height: 1.55;
 }
 /* Zelfde opbouw als de topbar op het overzicht: titel links, indicator rechts. */
 .detail-topbar {
@@ -713,12 +596,6 @@ dialog {
   h1 {
     font-size: 36px;
   }
-  .list-grid {
-    grid-template-columns: 1fr;
-  }
-  .list-card {
-    min-height: 135px;
-  }
   .list-title-row input {
     font-size: 34px;
   }
@@ -812,15 +689,10 @@ dialog {
 
 /* ---------- Fase 8: slepen met een zwevende kopie (§8.15) ---------- */
 /* Op touch neemt het handvat de vinger over: geen scrollen, geen swipe. */
-.drag-handle,
-.list-drag-handle {
+.drag-handle {
   touch-action: none;
 }
 /* De oranje lijn staat waar de rij landt: naar beneden slepen → eronder. */
-.list-card.drag-over.drop-after {
-  border-top: 1px solid #ddccbfbf;
-  border-bottom: 2px solid var(--orange);
-}
 .item.drag-over.drop-after {
   border-top: 1px solid transparent;
   border-bottom: 2px solid var(--orange);
@@ -836,7 +708,6 @@ dialog {
   transform: rotate(1.5deg) scale(1.03);
   transform-origin: 24px 50%;
 }
-.drag-ghost > .list-card,
 .drag-ghost > .item {
   margin: 0;
   border-color: var(--line);
@@ -844,7 +715,6 @@ dialog {
   box-shadow: 0 14px 30px rgba(52, 46, 42, 0.18);
   transition: none;
 }
-.drag-ghost .list-drag-handle,
 .drag-ghost .drag-handle {
   cursor: grabbing;
 }

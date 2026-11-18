@@ -243,7 +243,7 @@ const ghostStyle = computed(() =>
       </div>
     </header>
 
-    <div class="list-grid">
+    <div class="grid grid-cols-2 gap-[14px] max-sm:grid-cols-1">
       <ListCard
         v-for="list in lists"
         :key="list.id"
@@ -262,8 +262,9 @@ const ghostStyle = computed(() =>
     <Teleport to="body">
       <div
         v-if="ghost && draggedList"
-        class="drag-ghost"
+        class="pointer-events-none fixed z-60 origin-[24px_50%] scale-[1.03] rotate-[1.5deg] motion-reduce:scale-none motion-reduce:rotate-none"
         :style="ghostStyle"
+        data-drag-ghost
         aria-hidden="true"
         inert
       >
@@ -271,10 +272,21 @@ const ghostStyle = computed(() =>
       </div>
     </Teleport>
 
-    <div v-if="lists.length === 0" class="empty-state">
-      <div class="empty-icon">+</div>
-      <h2>Nog geen lijstjes</h2>
-      <p>Maak je eerste lijstje en houd alles heerlijk overzichtelijk.</p>
+    <div
+      v-if="lists.length === 0"
+      class="rounded-dialog border border-dashed border-line-dashed px-[25px] py-[72px] text-center"
+    >
+      <div
+        class="mx-auto mb-[17px] grid size-[46px] place-items-center rounded-full bg-accent-soft text-[29px] text-accent"
+      >
+        +
+      </div>
+      <h2 class="text-[26px]">Nog geen lijstjes</h2>
+      <p
+        class="mx-auto mt-[10px] mb-[18px] max-w-[300px] leading-[1.55] text-muted"
+      >
+        Maak je eerste lijstje en houd alles heerlijk overzichtelijk.
+      </p>
       <UiButton variant="text" @click="openNewListDialog">
         Maak een lijstje
       </UiButton>

@@ -18,7 +18,7 @@ const { distance, pulling, refreshing, progress, start, move, end, cancel } =
 
 /** Hier begint nooit een pull: velden, sleephandvatten en dialogen. */
 const BLOCKED =
-  "input, textarea, select, dialog, .drag-handle, .list-drag-handle";
+  "input, textarea, select, dialog, [data-drag-handle], .drag-handle";
 
 function atTop(): boolean {
   return window.scrollY <= 0;
