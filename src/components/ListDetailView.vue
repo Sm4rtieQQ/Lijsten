@@ -192,21 +192,25 @@ function onClearCompleted(): void {
 <template>
   <section class="view">
     <template v-if="activeListId && list">
-      <header class="detail-topbar">
-        <div class="list-title-row">
+      <header class="mb-[18px] flex items-start justify-between gap-4">
+        <div class="relative min-w-0 flex-1">
+          <!-- De oranje lijn groeit mee zolang de titel focus heeft. -->
           <input
+            class="peer w-full border-0 bg-transparent pb-[9px] font-display text-[39px] font-semibold tracking-[-0.045em] text-ink outline-none max-sm:text-[34px]"
             :value="list.title"
             type="text"
             maxlength="60"
             aria-label="Naam van het lijstje"
             @change="onTitleChange"
           />
-          <span></span>
+          <span
+            class="absolute bottom-0 left-0 h-[3px] w-[46px] rounded-[4px] bg-accent transition-all duration-200 ease-[ease] peer-focus:w-full"
+          ></span>
         </div>
         <SyncIndicator />
       </header>
 
-      <header class="detail-header">
+      <header class="mb-[25px] flex items-center justify-between">
         <UiButton variant="text-muted" @click="goBack">
           <template #icon>
             <svg
@@ -221,8 +225,13 @@ function onClearCompleted(): void {
         </UiButton>
       </header>
 
-      <form class="new-item-form" novalidate @submit.prevent="onAddItem">
+      <form
+        class="flex h-[58px] gap-[5px] rounded-form border border-form-line bg-surface p-[6px] shadow-form focus-within:border-focus focus-within:shadow-focus"
+        novalidate
+        @submit.prevent="onAddItem"
+      >
         <input
+          class="min-w-0 flex-1 border-0 bg-transparent px-3 text-ink outline-none placeholder:text-placeholder"
           v-model="newItemText"
           type="text"
           maxlength="160"
@@ -237,7 +246,9 @@ function onClearCompleted(): void {
         </UiIconButton>
       </form>
 
-      <div class="item-meta">
+      <div
+        class="mx-[2px] mt-[18px] mb-[10px] flex justify-between text-[13px] text-muted"
+      >
         <span>{{ itemCount === 1 ? "1 item" : `${itemCount} items` }}</span>
         <UiButton
           variant="text"
@@ -269,7 +280,7 @@ function onClearCompleted(): void {
         </UiButton>
       </div>
 
-      <ul v-if="list.items.length" class="items-list">
+      <ul v-if="list.items.length">
         <ItemRow
           v-for="item in list.items"
           :key="item.id"
@@ -290,14 +301,15 @@ function onClearCompleted(): void {
         />
       </ul>
 
-      <div v-else class="list-empty">
+      <div v-else class="mt-11 text-center text-[14px] text-empty">
         Je lijstje is leeg. Voeg hierboven iets toe.
       </div>
       <!-- Zwevende kopie van het gesleepte item (§8.15); geen klikdoel. -->
       <Teleport to="body">
         <ul
           v-if="ghost && draggedItem"
-          class="items-list drag-ghost"
+          class="pointer-events-none fixed z-60 m-0 origin-[24px_50%] scale-103 rotate-[1.5deg] p-0 motion-reduce:scale-100 motion-reduce:rotate-none"
+          data-drag-ghost
           :style="ghostStyle"
           aria-hidden="true"
           inert

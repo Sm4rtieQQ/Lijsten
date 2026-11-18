@@ -110,17 +110,12 @@ describe("PullToRefresh (AGENTS.md §8.14)", () => {
   });
 
   // De component herkent deze plekken aan BLOCKED in PullToRefresh.vue.
-  // Handvatten dragen `data-drag-handle`; `.drag-handle` blijft tot het
-  // item-handvat ook het attribuut heeft (GitHub-issue #22).
+  // Sleephandvatten (lijstkaart en item) dragen `data-drag-handle`.
   it.each([
     ["een invoerveld", "<input />"],
     ["een tekstvak", "<textarea></textarea>"],
     ["een keuzelijst", "<select></select>"],
     ["een dialoog", "<dialog><p>tekst</p></dialog>"],
-    [
-      "het sleephandvat van een item",
-      '<button class="drag-handle"><span></span></button>',
-    ],
     [
       "een handvat met data-drag-handle",
       "<button data-drag-handle><span></span></button>",

@@ -8,6 +8,7 @@ import { createList, createListItem, type ListItem } from "../types/app";
 
 const { lists, activeListId, setActiveList } = useLists();
 const CLEAR = '[data-testid="clear-completed"]';
+const EDIT_INPUT = 'input[aria-label^="Pas item aan"]';
 
 /** Zet één lijst met de gegeven items klaar en opent die als actieve lijst. */
 function seed(items: ListItem[]): void {
@@ -84,11 +85,11 @@ describe("ListDetailView — Android-terugknop (AGENTS.md §8.13)", () => {
     seed([item("Melk", false)]);
     wrapper = mount(ListDetailView);
     await wrapper.get('button[aria-label="Item aanpassen"]').trigger("click");
-    expect(wrapper.find("input.item-text").exists()).toBe(true);
+    expect(wrapper.find(EDIT_INPUT).exists()).toBe(true);
 
     expect(handleBack()).toBe(true);
     await wrapper.vm.$nextTick();
-    expect(wrapper.find("input.item-text").exists()).toBe(false);
+    expect(wrapper.find(EDIT_INPUT).exists()).toBe(false);
     expect(activeListId.value).not.toBeNull();
 
     expect(handleBack()).toBe(true);
@@ -112,6 +113,6 @@ describe("ListDetailView — item bewerken", () => {
     wrapper = mount(ListDetailView, { attachTo: document.body });
     await wrapper.get('button[aria-label="Item aanpassen"]').trigger("click");
     await flushPromises();
-    expect(document.activeElement).toBe(wrapper.get("input.item-text").element);
+    expect(document.activeElement).toBe(wrapper.get(EDIT_INPUT).element);
   });
 });

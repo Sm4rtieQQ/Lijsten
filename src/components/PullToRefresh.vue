@@ -17,8 +17,7 @@ const { distance, pulling, refreshing, progress, start, move, end, cancel } =
   usePullToRefresh(() => syncNow());
 
 /** Hier begint nooit een pull: velden, sleephandvatten en dialogen. */
-const BLOCKED =
-  "input, textarea, select, dialog, [data-drag-handle], .drag-handle";
+const BLOCKED = "input, textarea, select, dialog, [data-drag-handle]";
 
 function atTop(): boolean {
   return window.scrollY <= 0;

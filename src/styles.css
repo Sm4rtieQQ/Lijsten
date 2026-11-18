@@ -40,177 +40,6 @@
   stroke-linecap: round;
 }
 
-/* Zelfde opbouw als de header van het overzicht (HomeView.vue): titel links, indicator rechts. */
-.detail-topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-.detail-topbar .list-title-row {
-  flex: 1;
-  min-width: 0;
-  margin-bottom: 0;
-}
-.detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 25px;
-}
-.list-title-row {
-  position: relative;
-  margin-bottom: 18px;
-}
-.list-title-row input {
-  width: 100%;
-  padding: 0 0 9px;
-  border: 0;
-  outline: 0;
-  color: var(--ink);
-  background: transparent;
-  font-family: "Playfair Display", serif;
-  font-size: 39px;
-  font-weight: 600;
-  letter-spacing: -0.045em;
-}
-.list-title-row span {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 46px;
-  height: 3px;
-  border-radius: 4px;
-  background: var(--orange);
-  transition: 0.2s;
-}
-.list-title-row input:focus + span {
-  width: 100%;
-}
-.new-item-form {
-  height: 58px;
-  padding: 6px;
-  display: flex;
-  gap: 5px;
-  border: 1px solid #dfd0be;
-  border-radius: 15px;
-  background: var(--white);
-  box-shadow: 0 5px 13px #5d412109;
-}
-.new-item-form:focus-within {
-  border-color: #e6a681;
-  box-shadow: 0 0 0 3px #e66d351a;
-}
-.new-item-form input {
-  min-width: 0;
-  flex: 1;
-  padding: 0 12px;
-  border: 0;
-  outline: 0;
-  color: var(--ink);
-  background: transparent;
-}
-.new-item-form input::placeholder {
-  color: #b2a79b;
-}
-.item-meta {
-  display: flex;
-  justify-content: space-between;
-  margin: 18px 2px 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.items-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.item {
-  min-height: 62px;
-  margin-bottom: 8px;
-  padding: 8px 10px 8px 5px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  border: 1px solid transparent;
-  border-radius: 13px;
-  background: transparent;
-  transition: 0.18s;
-}
-.item:hover {
-  border-color: #e6d9ca;
-  background: #fffdfa75;
-}
-.item.dragging {
-  opacity: 0.35;
-}
-.item.drag-over {
-  border-top: 2px solid var(--orange);
-}
-.drag-handle {
-  width: 22px;
-  padding: 0;
-  border: 0;
-  color: #b9aea2;
-  background: none;
-  cursor: grab;
-}
-.drag-handle svg {
-  width: 16px;
-  height: 20px;
-  fill: currentColor;
-}
-.check-button {
-  width: 24px;
-  height: 24px;
-  flex: none;
-  padding: 0;
-  border: 1.8px solid #c8b9aa;
-  border-radius: 5px; /* F2: vierkant met afgeronde hoeken, niet rond */
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: transparent;
-  transition: 0.18s;
-}
-.check-button svg {
-  width: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0;
-}
-.item.completed .check-button {
-  border-color: var(--orange);
-  background: var(--orange);
-}
-.item.completed .check-button svg {
-  opacity: 1;
-}
-.item-text {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 2px;
-  border: 0;
-  outline: 0;
-  color: var(--ink);
-  background: transparent;
-  font-size: 16px;
-  line-height: 1.35;
-}
-.item.completed .item-text {
-  color: #aaa198;
-  text-decoration: line-through;
-}
-.list-empty {
-  margin-top: 44px;
-  color: #aaa095;
-  text-align: center;
-  font-size: 14px;
-}
 .detail-actions {
   display: flex;
   align-items: center;
@@ -240,32 +69,8 @@
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-.item-text {
-  cursor: pointer;
-}
-.item input.item-text {
-  cursor: text;
-}
-.item {
-  margin-bottom: 10px;
-  border-color: #eaded0;
-  background: rgba(255, 253, 250, 0.42);
-}
-.check-button {
-  width: 20px;
-  height: 20px;
-  border-width: 1.6px;
-  border-radius: 5px; /* F2: ook op de eindgrootte vierkant met afgeronde hoeken */
-  transition: 0.18s;
-}
-.check-button svg {
-  width: 12px;
-}
 .refresh-status[hidden] {
   display: none;
-}
-.drag-handle {
-  display: block;
 }
 @media (max-width: 520px) {
   .app-shell {
@@ -276,15 +81,6 @@
   }
   h1 {
     font-size: 36px;
-  }
-  .list-title-row input {
-    font-size: 34px;
-  }
-  .drag-handle {
-    display: block;
-  }
-  .item {
-    padding-left: 7px;
   }
 }
 
@@ -297,41 +93,4 @@
 }
 .logout-button:hover {
   color: var(--orange);
-}
-
-/* ---------- Fase 8: slepen met een zwevende kopie (§8.15) ---------- */
-/* Op touch neemt het handvat de vinger over: geen scrollen, geen swipe. */
-.drag-handle {
-  touch-action: none;
-}
-/* De oranje lijn staat waar de rij landt: naar beneden slepen → eronder. */
-.item.drag-over.drop-after {
-  border-top: 1px solid transparent;
-  border-bottom: 2px solid var(--orange);
-}
-/* De kopie volgt de vinger/muis; geen klikdoel, boven alles. */
-.drag-ghost {
-  position: fixed;
-  z-index: 60;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  pointer-events: none;
-  transform: rotate(1.5deg) scale(1.03);
-  transform-origin: 24px 50%;
-}
-.drag-ghost > .item {
-  margin: 0;
-  border-color: var(--line);
-  background: var(--white);
-  box-shadow: 0 14px 30px rgba(52, 46, 42, 0.18);
-  transition: none;
-}
-.drag-ghost .drag-handle {
-  cursor: grabbing;
-}
-@media (prefers-reduced-motion: reduce) {
-  .drag-ghost {
-    transform: none;
-  }
 }
