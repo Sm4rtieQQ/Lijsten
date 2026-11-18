@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
+import {
+  flushPromises,
+  mount,
+  type DOMWrapper,
+  type VueWrapper,
+} from "@vue/test-utils";
 
 const { mockResend } = vi.hoisted(() => ({ mockResend: vi.fn() }));
 
@@ -25,6 +30,18 @@ import { useAuth } from "../composables/useAuth";
 
 const AUTH = useAuth();
 
+/** De knop met precies deze tekst (specs zoeken niet op stijlklassen). */
+function buttonWithText(
+  wrapper: VueWrapper,
+  text: string,
+): DOMWrapper<Element> {
+  const button = wrapper
+    .findAll("button")
+    .find((candidate) => candidate.text() === text);
+  if (!button) throw new Error(`Geen knop met de tekst "${text}"`);
+  return button;
+}
+
 describe("VerifyEmailView (AGENTS.md §7.6)", () => {
   beforeEach(() => {
     mockResend.mockReset();
@@ -49,7 +66,7 @@ describe("VerifyEmailView (AGENTS.md §7.6)", () => {
     mockResend.mockResolvedValue({ data: {}, error: null });
 
     const wrapper = mount(VerifyEmailView);
-    const button = wrapper.get("button.button-secondary");
+    const button = buttonWithText(wrapper, "Nieuwe verificatielink opvragen");
 
     await button.trigger("click");
     await flushPromises();
@@ -73,7 +90,7 @@ describe("VerifyEmailView (AGENTS.md §7.6)", () => {
 
   it("emit 'back' via de terug-knop", async () => {
     const wrapper = mount(VerifyEmailView);
-    await wrapper.get("button.forgot-password").trigger("click");
+    await buttonWithText(wrapper, "Terug naar inloggen").trigger("click");
 
     expect(wrapper.emitted("back")).toBeTruthy();
   });

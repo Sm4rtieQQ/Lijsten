@@ -39,7 +39,7 @@ describe("HomeView — uitloggen met niet-verstuurde wijzigingen (AGENTS.md §7.
 
   async function openMenu(): Promise<VueWrapper> {
     const w = mount(HomeView);
-    await w.get(".icon-button").trigger("click");
+    await w.get('button[aria-label="Account en acties"]').trigger("click");
     return w;
   }
 
@@ -59,7 +59,6 @@ describe("HomeView — uitloggen met niet-verstuurde wijzigingen (AGENTS.md §7.
     await logout.trigger("click");
     await flushPromises();
     expect(mockSignOut).not.toHaveBeenCalled();
-    expect(logout.classes()).toContain("is-armed");
     expect(logout.text()).toBe("Toch uitloggen");
     expect(logout.attributes("aria-pressed")).toBe("true");
     expect(wrapper.get(".panel-note").text()).toContain(
@@ -77,9 +76,15 @@ describe("HomeView — uitloggen met niet-verstuurde wijzigingen (AGENTS.md §7.
     wrapper = await openMenu();
     await wrapper.get(".panel-logout").trigger("click");
     await flushPromises();
-    await wrapper.get(".icon-button").trigger("click"); // menu dicht
-    await wrapper.get(".icon-button").trigger("click"); // weer open
-    expect(wrapper.get(".panel-logout").classes()).not.toContain("is-armed");
+    await wrapper
+      .get('button[aria-label="Account en acties"]')
+      .trigger("click"); // menu dicht
+    await wrapper
+      .get('button[aria-label="Account en acties"]')
+      .trigger("click"); // weer open
+    expect(wrapper.get(".panel-logout").attributes("aria-pressed")).toBe(
+      "false",
+    );
     expect(wrapper.find(".panel-note").exists()).toBe(false);
   });
 });

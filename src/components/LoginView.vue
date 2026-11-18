@@ -2,6 +2,7 @@
 import { reactive } from "vue";
 
 import AuthCard from "./AuthCard.vue";
+import UiButton from "./ui/UiButton.vue";
 import PasswordInput from "./PasswordInput.vue";
 import { useAuth } from "../composables/useAuth";
 
@@ -63,21 +64,23 @@ async function onForgot() {
         />
       </label>
       <p class="login-message" aria-live="polite">{{ form.message }}</p>
-      <button class="dialog-submit" type="submit">
-        Inloggen <span>&#8594;</span>
-      </button>
+      <UiButton type="submit" block class="mt-[25px]">
+        Inloggen
+        <template #trailing>&#8594;</template>
+      </UiButton>
     </form>
 
-    <button class="text-button forgot-password" type="button" @click="onForgot">
-      Wachtwoord vergeten?
-    </button>
-
-    <button
-      class="button-secondary login-register"
-      type="button"
-      @click="emit('register')"
+    <UiButton
+      variant="text"
+      size="sm"
+      class="-mt-1 justify-self-start"
+      @click="onForgot"
     >
+      Wachtwoord vergeten?
+    </UiButton>
+
+    <UiButton variant="secondary" block class="mt-3" @click="emit('register')">
       Registreren
-    </button>
+    </UiButton>
   </AuthCard>
 </template>

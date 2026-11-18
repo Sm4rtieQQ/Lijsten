@@ -2,6 +2,7 @@
 import { nextTick, onMounted, reactive, ref } from "vue";
 
 import AuthCard from "./AuthCard.vue";
+import UiButton from "./ui/UiButton.vue";
 import PasswordInput from "./PasswordInput.vue";
 import { useAuth } from "../composables/useAuth";
 import { EMAIL_REQUIRED, validateNewPassword } from "../lib/validation";
@@ -90,18 +91,19 @@ onMounted(async () => {
       <p id="register-message" class="login-message" aria-live="polite">
         {{ form.message }}
       </p>
-      <button class="dialog-submit" type="submit" :disabled="busy">
+      <UiButton type="submit" block class="mt-[25px]" :disabled="busy">
         Account aanmaken
-        <span>&#8594;</span>
-      </button>
+        <template #trailing>&#8594;</template>
+      </UiButton>
     </form>
 
-    <button
-      class="text-button forgot-password"
-      type="button"
+    <UiButton
+      variant="text"
+      size="sm"
+      class="-mt-1 justify-self-start"
       @click="emit('cancel')"
     >
       Terug naar inloggen
-    </button>
+    </UiButton>
   </AuthCard>
 </template>
