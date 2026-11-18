@@ -76,7 +76,7 @@ describe("VerifyEmailView (AGENTS.md §7.6)", () => {
       email: "nieuw@voorbeeld.nl",
       options: { emailRedirectTo: expect.any(String) },
     });
-    expect(wrapper.get(".login-message").text()).toBe(
+    expect(wrapper.get('[data-testid="auth-message"]').text()).toBe(
       "Er is een nieuwe verificatielink verstuurd.",
     );
     expect(button.attributes("disabled")).toBeDefined();

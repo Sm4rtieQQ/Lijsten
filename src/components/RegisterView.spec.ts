@@ -98,7 +98,7 @@ describe("RegisterView — open registratie (AGENTS.md §7.6)", () => {
     const wrapper = mount(RegisterView);
     await submit(wrapper, "nieuw@voorbeeld.nl", "geheim123", "geheim124");
 
-    expect(wrapper.get(".login-message").text()).toBe(
+    expect(wrapper.get('[data-testid="auth-message"]').text()).toBe(
       "De wachtwoorden verschillen.",
     );
     expect(mockSignUp).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe("RegisterView — open registratie (AGENTS.md §7.6)", () => {
     const wrapper = mount(RegisterView);
     await submit(wrapper, "nieuw@voorbeeld.nl", "12345");
 
-    expect(wrapper.get(".login-message").text()).toBe(
+    expect(wrapper.get('[data-testid="auth-message"]').text()).toBe(
       "Het wachtwoord moet minimaal 6 tekens hebben.",
     );
     expect(mockSignUp).not.toHaveBeenCalled();
@@ -126,7 +126,7 @@ describe("RegisterView — open registratie (AGENTS.md §7.6)", () => {
     const wrapper = mount(RegisterView);
     await submit(wrapper, "bestaat@voorbeeld.nl");
 
-    expect(wrapper.get(".login-message").text()).toBe(
+    expect(wrapper.get('[data-testid="auth-message"]').text()).toBe(
       "Er bestaat al een account met dit e-mailadres.",
     );
   });
@@ -136,7 +136,7 @@ describe("RegisterView — open registratie (AGENTS.md §7.6)", () => {
 
     const password = wrapper.get('input[aria-label="Wachtwoord"]');
     const repeat = wrapper.get('input[aria-label="Wachtwoord herhalen"]');
-    const toggles = wrapper.findAll(".toggle-password-button");
+    const toggles = wrapper.findAll('button[aria-label^="Toon "]');
 
     expect(password.attributes("type")).toBe("password");
     expect(repeat.attributes("type")).toBe("password");

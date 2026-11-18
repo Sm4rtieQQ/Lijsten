@@ -3,6 +3,8 @@ import { nextTick, onMounted, reactive, ref } from "vue";
 
 import AuthCard from "./AuthCard.vue";
 import UiButton from "./ui/UiButton.vue";
+import UiField from "./ui/UiField.vue";
+import UiInput from "./ui/UiInput.vue";
 import PasswordInput from "./PasswordInput.vue";
 import { useAuth } from "../composables/useAuth";
 import { EMAIL_REQUIRED, validateNewPassword } from "../lib/validation";
@@ -18,7 +20,7 @@ const form = reactive({
   message: "",
 });
 
-const emailInput = ref<HTMLInputElement | null>(null);
+const emailInput = ref<InstanceType<typeof UiInput> | null>(null);
 const busy = ref(false);
 
 function validate(): string | null {
@@ -57,10 +59,9 @@ onMounted(async () => {
 
 <template>
   <AuthCard eyebrow="ACCOUNT AANMAKEN">
-    <form class="login-form" novalidate @submit.prevent="onSubmit">
-      <label>
-        E-mailadres
-        <input
+    <form class="grid gap-[15px]" novalidate @submit.prevent="onSubmit">
+      <UiField label="E-mailadres">
+        <UiInput
           ref="emailInput"
           v-model.trim="form.email"
           type="email"
@@ -68,9 +69,8 @@ onMounted(async () => {
           aria-describedby="register-message"
           placeholder="jij@voorbeeld.nl"
         />
-      </label>
-      <label>
-        Wachtwoord
+      </UiField>
+      <UiField label="Wachtwoord">
         <PasswordInput
           v-model="form.password"
           toggle-name="wachtwoord"
@@ -78,17 +78,22 @@ onMounted(async () => {
           placeholder="Minimaal 6 tekens"
           aria-label="Wachtwoord"
         />
-      </label>
-      <label>
-        Wachtwoord herhalen
+      </UiField>
+      <UiField label="Wachtwoord herhalen">
         <PasswordInput
           v-model="form.repeat"
           toggle-name="wachtwoord herhalen"
           autocomplete="new-password"
           aria-label="Wachtwoord herhalen"
         />
-      </label>
-      <p id="register-message" class="login-message" aria-live="polite">
+      </UiField>
+      <p
+        id="register-message"
+        data-testid="auth-message"
+        role="status"
+        aria-live="polite"
+        class="min-h-[18px] text-[13px] text-accent"
+      >
         {{ form.message }}
       </p>
       <UiButton type="submit" block class="mt-[25px]" :disabled="busy">

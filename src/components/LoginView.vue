@@ -3,6 +3,8 @@ import { reactive } from "vue";
 
 import AuthCard from "./AuthCard.vue";
 import UiButton from "./ui/UiButton.vue";
+import UiField from "./ui/UiField.vue";
+import UiInput from "./ui/UiInput.vue";
 import PasswordInput from "./PasswordInput.vue";
 import { useAuth } from "../composables/useAuth";
 
@@ -36,25 +38,26 @@ async function onForgot() {
 
 <template>
   <AuthCard eyebrow="WELKOM BIJ">
-    <p v-if="!configured" class="login-note">
+    <p
+      v-if="!configured"
+      class="mt-[19px] text-[12px] leading-[1.5] text-muted"
+    >
       Supabase is niet geconfigureerd. Vul <code>.env</code> in (<code
         >VITE_SUPABASE_URL</code
       >
       en <code>VITE_SUPABASE_ANON_KEY</code>).
     </p>
 
-    <form class="login-form" novalidate @submit.prevent="onLogin">
-      <label>
-        E-mailadres
-        <input
+    <form class="grid gap-[15px]" novalidate @submit.prevent="onLogin">
+      <UiField label="E-mailadres">
+        <UiInput
           v-model.trim="form.email"
           type="email"
           autocomplete="email"
           placeholder="jij@voorbeeld.nl"
         />
-      </label>
-      <label>
-        Wachtwoord
+      </UiField>
+      <UiField label="Wachtwoord">
         <PasswordInput
           v-model="form.password"
           toggle-name="wachtwoord"
@@ -62,8 +65,15 @@ async function onForgot() {
           placeholder="Minimaal 6 tekens"
           aria-label="Wachtwoord"
         />
-      </label>
-      <p class="login-message" aria-live="polite">{{ form.message }}</p>
+      </UiField>
+      <p
+        data-testid="auth-message"
+        role="status"
+        aria-live="polite"
+        class="min-h-[18px] text-[13px] text-accent"
+      >
+        {{ form.message }}
+      </p>
       <UiButton type="submit" block class="mt-[25px]">
         Inloggen
         <template #trailing>&#8594;</template>
