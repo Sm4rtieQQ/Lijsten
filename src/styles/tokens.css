@@ -36,6 +36,8 @@
      gestippelde rand van de lege staat. */
   --color-line-hover: #e2b49c;
   --color-line-dashed: #d7c5b0;
+  /* Dialogen (GitHub-issue #18): de waas achter een modale dialoog. */
+  --color-scrim: #3c2b1f47;
 
   --font-sans: "DM Sans", sans-serif;
   --font-display: "Playfair Display", serif;

@@ -68,18 +68,22 @@ describe("UiButton", () => {
     expect(wrapper.find("span").exists()).toBe(false);
   });
 
-  it.each(["primary", "secondary", "text", "text-muted"] as const)(
-    "variant %s heeft een eigen uiterlijk",
-    (variant) => {
-      const own = mount(UiButton, { props: { variant } }).classes();
-      const others = (["primary", "secondary", "text", "text-muted"] as const)
-        .filter((other) => other !== variant)
-        .map((other) =>
-          mount(UiButton, { props: { variant: other } })
-            .classes()
-            .join(" "),
-        );
-      expect(others).not.toContain(own.join(" "));
-    },
-  );
+  const VARIANTS = [
+    "primary",
+    "secondary",
+    "text",
+    "text-muted",
+    "outline",
+    "danger",
+  ] as const;
+
+  it.each(VARIANTS)("variant %s heeft een eigen uiterlijk", (variant) => {
+    const own = mount(UiButton, { props: { variant } }).classes();
+    const others = VARIANTS.filter((other) => other !== variant).map((other) =>
+      mount(UiButton, { props: { variant: other } })
+        .classes()
+        .join(" "),
+    );
+    expect(others).not.toContain(own.join(" "));
+  });
 });

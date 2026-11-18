@@ -392,41 +392,6 @@
   text-align: center;
   font-size: 14px;
 }
-dialog {
-  border: 0;
-}
-.new-list-dialog {
-  width: min(calc(100% - 36px), 440px);
-  padding: 0;
-  border-radius: 20px;
-  color: var(--ink);
-  background: var(--white);
-  box-shadow: 0 22px 60px #3322143b;
-}
-.new-list-dialog::backdrop {
-  background: #3c2b1f47;
-  backdrop-filter: blur(2px);
-}
-.new-list-dialog form {
-  position: relative;
-  padding: 32px;
-}
-.new-list-dialog h2 {
-  margin-bottom: 22px;
-}
-.new-list-dialog input {
-  width: 100%;
-  padding: 13px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  outline: 0;
-  color: var(--ink);
-  background: transparent;
-  font-size: 16px;
-}
-.new-list-dialog input:focus {
-  border-color: var(--orange);
-}
 .below-title {
   /* Geen eigen bovenmarge meer: de ruimte zit nu in `padding-bottom` van het
      h1 (F1), zodat een diepe descender nooit achter de eyebrow verdwijnt. */

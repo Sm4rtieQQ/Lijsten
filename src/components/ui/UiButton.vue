@@ -7,14 +7,18 @@ import { computed, useSlots } from "vue";
  * - `primary`: oranje, de oude `.dialog-submit` (pijl via `#trailing`);
  * - `secondary`: oranje tekst met rand, de oude `.button-secondary`;
  * - `text`: oranje tekst, de oude `.text-button`/`.clear-button`;
- * - `text-muted`: grijze tekst, de oude `.back-button`.
+ * - `text-muted`: grijze tekst, de oude `.back-button`;
+ * - `outline`: donkere tekst met rand, de oude `.confirm-action`;
+ * - `danger`: oranje, de oude `.confirm-action.is-danger` (even hoog als
+ *   `outline`, kleinere tekst dan `primary`).
  *
  * `armed` (alleen als de knop een twee-stapsbevestiging is, §8.6) zet
  * `aria-pressed`; de gewapende stijl hangt aan dat attribuut en is dus
  * zonder hover zichtbaar. Zonder `armed` krijgt de knop geen `aria-pressed`.
  * Een gebruiker geeft alleen layoutklassen mee (marge, breedte, uitlijning).
  */
-type Variant = "primary" | "secondary" | "text" | "text-muted";
+type Variant =
+  "primary" | "secondary" | "text" | "text-muted" | "outline" | "danger";
 type Size = "md" | "sm";
 
 const props = withDefaults(
@@ -45,6 +49,10 @@ const variants: Record<Variant, string> = {
   text: "font-bold text-accent hover:text-accent-dark disabled:cursor-default disabled:text-disabled",
   "text-muted":
     "flex items-center gap-[3px] py-[5px] text-[14px] font-semibold text-muted hover:text-ink",
+  outline:
+    "min-h-touch rounded-button border border-line px-[18px] py-[10px] text-[14px] font-bold text-ink hover:border-accent hover:bg-accent-soft",
+  danger:
+    "min-h-touch rounded-button border border-transparent bg-accent px-[18px] py-[10px] text-[14px] font-bold text-white hover:bg-accent-dark",
 };
 
 const sizes: Record<Size, string> = {

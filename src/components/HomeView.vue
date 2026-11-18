@@ -1,12 +1,5 @@
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { useArmedConfirm } from "../composables/useArmedConfirm";
 import { useAuth } from "../composables/useAuth";
@@ -18,6 +11,8 @@ import ConfirmDeleteDialog from "./ConfirmDeleteDialog.vue";
 import ListCard from "./ListCard.vue";
 import SyncIndicator from "./SyncIndicator.vue";
 import UiButton from "./ui/UiButton.vue";
+import UiDialog from "./ui/UiDialog.vue";
+import UiInput from "./ui/UiInput.vue";
 import UiIconButton from "./ui/UiIconButton.vue";
 import type { List } from "../types/app";
 
@@ -35,8 +30,7 @@ const accountOpen = ref(false);
 const accountRef = ref<HTMLElement | null>(null);
 const accountButtonRef = ref<InstanceType<typeof UiIconButton> | null>(null);
 const newListTitle = ref("");
-const newListDialog = ref<HTMLDialogElement | null>(null);
-const newListInput = ref<HTMLInputElement | null>(null);
+const newListOpen = ref(false);
 const deleteTarget = ref<List | null>(null);
 
 function onDocumentClick(event: MouseEvent): void {
@@ -52,13 +46,9 @@ function onDocumentKeydown(event: KeyboardEvent): void {
     accountButtonRef.value?.focus();
   }
 }
-/** Android-terugknop (§8.13): eerst de dialoog, dan het menu. */
+/** Android-terugknop (§8.13): het menu. Een open dialoog gaat zelf voor (UiDialog). */
 function onBack(): boolean {
   if (activeListId.value) return false; // het overzicht is niet zichtbaar
-  if (newListDialog.value?.open) {
-    closeNewListDialog();
-    return true;
-  }
   if (accountOpen.value) {
     accountOpen.value = false;
     return true;
@@ -84,20 +74,13 @@ function toggleAccount(): void {
 
 function openNewListDialog(): void {
   accountOpen.value = false;
-  nextTick(() => {
-    newListDialog.value?.showModal();
-    newListInput.value?.focus();
-  });
-}
-
-function closeNewListDialog(): void {
-  newListDialog.value?.close();
+  newListOpen.value = true;
 }
 
 function onCreateList(): void {
   const listId = createNewList(newListTitle.value);
   newListTitle.value = "";
-  closeNewListDialog();
+  newListOpen.value = false;
   if (listId) setActiveList(listId);
 }
 
@@ -292,33 +275,24 @@ const ghostStyle = computed(() =>
       </UiButton>
     </div>
 
-    <dialog ref="newListDialog" class="new-list-dialog">
-      <form class="new-list-form" novalidate @submit.prevent="onCreateList">
-        <UiIconButton
-          variant="close"
-          class="absolute top-[15px] right-[17px]"
-          label="Sluiten"
-          @click="closeNewListDialog"
-        >
-          &times;
-        </UiIconButton>
-        <p class="eyebrow">NIEUW LIJSTJE</p>
-        <h2>Hoe heet het lijstje?</h2>
-        <input
-          ref="newListInput"
-          v-model="newListTitle"
-          type="text"
-          maxlength="60"
-          placeholder="Bijvoorbeeld: Boodschappen"
-          autocomplete="off"
-          aria-label="Naam van het lijstje"
-        />
-        <UiButton type="submit" block class="mt-[25px]">
-          Maak lijstje
-          <template #trailing>&#8594;</template>
-        </UiButton>
-      </form>
-    </dialog>
+    <UiDialog v-model:open="newListOpen" closable @submit="onCreateList">
+      <template #eyebrow>NIEUW LIJSTJE</template>
+      <template #title>Hoe heet het lijstje?</template>
+      <UiInput
+        v-model="newListTitle"
+        variant="underline"
+        type="text"
+        maxlength="60"
+        placeholder="Bijvoorbeeld: Boodschappen"
+        autocomplete="off"
+        autofocus
+        aria-label="Naam van het lijstje"
+      />
+      <UiButton type="submit" block class="mt-[25px]">
+        Maak lijstje
+        <template #trailing>&#8594;</template>
+      </UiButton>
+    </UiDialog>
 
     <ConfirmDeleteDialog
       v-if="deleteTarget"
